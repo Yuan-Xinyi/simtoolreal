@@ -23,7 +23,6 @@ def main() -> None:
     parser.add_argument("--steps", type=int, default=5)
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
-    args.headless = True
 
     app_launcher = AppLauncher(args)
     app = app_launcher.app

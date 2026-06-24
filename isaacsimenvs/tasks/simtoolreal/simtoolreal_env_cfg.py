@@ -378,6 +378,39 @@ class ResetCfg:
     table_reset_z: float = 0.38
     table_reset_z_range: float = 0.01
     table_object_z_offset: float = 0.25
+    # Table top surface height above the table root frame. table_narrow.urdf is
+    # a 0.3 m tall box centered on its origin, so the top is +0.15 m.
+    table_top_offset: float = 0.15
+    # Minimum vertical gap (m) between the object's lowest geometric point and
+    # the table top at reset. With a random spawn orientation the object root
+    # sits only ~0.10 m above the top, so elongated objects (e.g. hammers) can
+    # spawn penetrating the table; PhysX then resolves that overlap with a large
+    # impulse and the object "launches" off the table on the first step
+    # (see issue #17). When set, the spawn z is raised just enough to keep the
+    # object's (keypoint-box) lowest point this far above the top. Set to None
+    # to restore the legacy unclamped behavior.
+    #
+    # Headless sweep (sweep_reset_clearance.py, zero-action, fraction of envs
+    # whose object speed after 1 step > 0.5 m/s = depenetration launch):
+    #   none -> 16%, 0.005 -> 11%, 0.02 -> 8%, 0.05 -> 5%, 0.10 -> 3.6%.
+    # It plateaus, not zero: the residual launches persist even when the object
+    # is raised 10 cm clear of the table (still 13 m/s spikes), i.e. they are
+    # object-vs-robot-hand penetration at spawn, which table clearance cannot
+    # fix. See sweep_reset_clearance.py. 0.02 captures most of the table-side
+    # win with a small extra drop.
+    reset_object_clearance: float | None = 0.02
+
+    # Reject object spawns that overlap the robot hand. With a random spawn pose
+    # the object can land inside the fingers/palm; PhysX ejects it with a large
+    # impulse on the first step — this is the residual reset "launch" that table
+    # clearance alone cannot fix (it persists even when the object is lifted
+    # 10 cm clear of the table; see sweep_reset_clearance.py). When enabled, the
+    # object pose is resampled (up to reset_max_resample_iters times) until the
+    # object's bounding sphere clears every fingertip and the palm by
+    # reset_hand_clearance_margin.
+    reset_avoid_hand: bool = True
+    reset_hand_clearance_margin: float = 0.03  # m, extra gap beyond object radius
+    reset_max_resample_iters: int = 10
     # Per-env XY position noise applied at reset (uniform half-widths in m).
     # Default (0, 0) keeps the table centered on the env origin (legacy behavior).
     table_reset_xy_range_m: tuple[float, float] = (0.0, 0.0)

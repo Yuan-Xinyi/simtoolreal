@@ -7,7 +7,7 @@ from pathlib import Path
 
 import torch
 
-from isaaclab.utils.math import random_orientation
+from isaaclab.utils.math import quat_apply, random_orientation
 
 from .action_utils import sample_log_uniform
 from .goal_sampling import sample_absolute_goal_pose, sample_delta_goal_pose
@@ -268,6 +268,81 @@ def _reset_table_pose(env, env_ids: torch.Tensor) -> None:
     pose = torch.cat([pos_local + env_origins, quat], dim=-1)
     env.table.write_root_pose_to_sim(pose, env_ids=env_ids)
 
+def _apply_table_clearance(env, env_ids: torch.Tensor, pos_local, quat) -> None:
+    """Raise spawn z so the object's lowest point clears the table top.
+
+    With a random spawn orientation the object root sits only ~0.10 m above the
+    table top, so for some orientations an elongated object's lowest point dips
+    below the surface and spawns penetrating the table. PhysX resolves that
+    overlap with a large impulse and the object launches off on the first step
+    (issue #17). Compute the lowest point of the (keypoint) bounding box under
+    the sampled orientation and raise z just enough to keep it `clearance` above
+    the top. Only lifts when needed, so the settled drop distribution is
+    otherwise unchanged. Edits ``pos_local`` in place.
+    """
+    cfg = env.cfg.reset
+    clearance = cfg.reset_object_clearance
+    if clearance is None:
+        return
+    n = env_ids.numel()
+    half = env._keypoint_offsets[env_ids].abs().amax(dim=1)  # (n, 3)
+    eye = torch.eye(3, device=env.device)
+    ex = quat_apply(quat, eye[0].expand(n, 3))
+    ey = quat_apply(quat, eye[1].expand(n, 3))
+    ez = quat_apply(quat, eye[2].expand(n, 3))
+    # Depth of the box's lowest corner below the root (>= 0).
+    drop = (
+        ex[:, 2].abs() * half[:, 0]
+        + ey[:, 2].abs() * half[:, 1]
+        + ez[:, 2].abs() * half[:, 2]
+    )
+    z_required = (
+        env._table_z_per_env[env_ids]
+        + cfg.table_top_offset
+        + clearance
+        + drop
+    )
+    pos_local[:, 2] = torch.maximum(pos_local[:, 2], z_required)
+
+
+def _sample_object_pose_local(env, env_ids: torch.Tensor):
+    """Sample a randomized env-local object pose with table clearance applied."""
+    cfg = env.cfg.reset
+    n = env_ids.numel()
+    noise = torch.empty(n, 3, device=env.device).uniform_(-1.0, 1.0)
+    pos_local = torch.stack(
+        (
+            noise[:, 0] * cfg.reset_position_noise_x,
+            noise[:, 1] * cfg.reset_position_noise_y,
+            env._table_z_per_env[env_ids]
+            + cfg.table_object_z_offset
+            + noise[:, 2] * cfg.reset_position_noise_z,
+        ),
+        dim=-1,
+    )
+    quat = random_orientation(n, device=env.device)
+    _apply_table_clearance(env, env_ids, pos_local, quat)
+    return pos_local, quat
+
+
+def _hand_overlap_mask(env, env_ids: torch.Tensor, pos_local) -> torch.Tensor:
+    """True where the object bounding sphere intersects a fingertip / the palm.
+
+    body_state_w reflects the freshly-written reset joint state (verified: the
+    pre-step hand pose matches the post-step pose to within one physics step),
+    so the hand keep-out points are valid here without a forward-kinematics
+    step. The object radius is its keypoint bounding sphere about the root.
+    """
+    cfg = env.cfg.reset
+    env_origins = env.scene.env_origins[env_ids]
+    body_ids = list(env._fingertip_body_ids) + [env._palm_body_id]
+    hand_w = env.robot.data.body_state_w[env_ids][:, body_ids, 0:3]  # (n, M, 3)
+    hand_local = hand_w - env_origins.unsqueeze(1)
+    obj_radius = env._keypoint_offsets[env_ids].norm(dim=-1).amax(dim=1)  # (n,)
+    dist = torch.norm(hand_local - pos_local.unsqueeze(1), dim=-1)  # (n, M)
+    return dist.amin(dim=1) < (obj_radius + cfg.reset_hand_clearance_margin)
+
+
 def _reset_object_pose(env, env_ids: torch.Tensor) -> None:
     """Reset object pose and lifted-reward reference height."""
     cfg = env.cfg.reset
@@ -279,18 +354,21 @@ def _reset_object_pose(env, env_ids: torch.Tensor) -> None:
         pos_local = fixed[:3].unsqueeze(0).expand(n, -1)
         quat = fixed[3:].unsqueeze(0).expand(n, -1)
     else:
-        noise = torch.empty(n, 3, device=env.device).uniform_(-1.0, 1.0)
-        pos_local = torch.stack(
-            (
-                noise[:, 0] * cfg.reset_position_noise_x,
-                noise[:, 1] * cfg.reset_position_noise_y,
-                env._table_z_per_env[env_ids]
-                + cfg.table_object_z_offset
-                + noise[:, 2] * cfg.reset_position_noise_z,
-            ),
-            dim=-1,
-        )
-        quat = random_orientation(n, device=env.device)
+        pos_local, quat = _sample_object_pose_local(env, env_ids)
+
+        # Reject spawns overlapping the hand and resample only those envs.
+        # Avoids the depenetration "launch" from an object dropped inside the
+        # fingers/palm (the residual that table clearance cannot fix).
+        if cfg.reset_avoid_hand:
+            overlap = _hand_overlap_mask(env, env_ids, pos_local)
+            for _ in range(cfg.reset_max_resample_iters):
+                if not overlap.any():
+                    break
+                sub = overlap.nonzero(as_tuple=False).squeeze(-1)
+                new_pos, new_quat = _sample_object_pose_local(env, env_ids[sub])
+                pos_local[sub] = new_pos
+                quat[sub] = new_quat
+                overlap = _hand_overlap_mask(env, env_ids, pos_local)
 
     pose = torch.cat([pos_local + env_origins, quat], dim=-1)
     env.object.write_root_pose_to_sim(pose, env_ids=env_ids)

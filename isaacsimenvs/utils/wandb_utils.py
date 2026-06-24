@@ -75,6 +75,10 @@ class WandbAlgoObserver(AlgoObserver):
                 id=wandb_unique_id,
                 name=display_name,
                 resume=True,
+                # Force online sync regardless of a stray WANDB_MODE=offline in
+                # the environment — the whole point of activating wandb here is
+                # to mirror metrics to the cloud in real time.
+                mode="online",
                 settings=wandb.Settings(start_method="fork"),
             )
             wandb.run.log_code(root=logcode_dir)

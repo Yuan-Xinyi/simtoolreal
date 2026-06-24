@@ -19,11 +19,14 @@ CLI shape:
         --task Isaacsimenvs-SimToolReal-Direct-v0 \
         --agent rl_games_sapg_cfg_entry_point \   # or rl_games_cfg_entry_point
         --headless --capture_viewer \
-        --wandb_activate --wandb_project X --wandb_name Y \
+        --wandb_project X --wandb_name Y \
         env.scene.num_envs=4096 \
         agent.params.config.max_epochs=200 \
         agent.params.config.minibatch_size=16384 \
         agent.params.seed=42
+
+    wandb online sync is on by default (mirrors rl_games' TensorBoard writer);
+    pass --no_wandb to disable and keep only local TensorBoard event files.
 """
 
 from __future__ import annotations
@@ -84,7 +87,21 @@ def main() -> None:
         help="Whether to HEAD-check the robot URDF URL before writing viewer HTML.",
     )
     # --- wandb ---
-    parser.add_argument("--wandb_activate", action="store_true")
+    # On by default: training syncs metrics to wandb online (sync_tensorboard
+    # mirrors rl_games' TensorBoard writer). Pass --no_wandb to disable.
+    parser.add_argument(
+        "--wandb_activate",
+        dest="wandb_activate",
+        action="store_true",
+        default=True,
+        help="Sync metrics to wandb online (default on).",
+    )
+    parser.add_argument(
+        "--no_wandb",
+        dest="wandb_activate",
+        action="store_false",
+        help="Disable wandb online sync (TensorBoard event files still written locally).",
+    )
     parser.add_argument("--wandb_project", default="isaacsimenvs")
     parser.add_argument("--wandb_group", default="")
     parser.add_argument("--wandb_entity", default="")
