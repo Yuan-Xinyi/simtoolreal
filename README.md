@@ -85,6 +85,19 @@ https://github.com/user-attachments/assets/58eb188b-662c-4190-8148-29710c9eb20f
 We recommend training in Isaac Sim. Training logs are tracked with [Weights & Biases](https://wandb.ai/); run `wandb login` before launching:
 
 ```
+python isaacsimenvs/train.py \
+    --task Isaacsimenvs-SimToolReal-Direct-v0 \
+    --agent rl_games_sapg_cfg_entry_point \
+    --headless \
+    --capture_viewer \
+    --wandb_activate \
+    --wandb_project <project> \
+    --wandb_entity <entity> \
+    env.scene.num_envs=12288 \
+    agent.params.config.expl_coef_block_size=2046
+```
+
+```
 .venv_isaacsim/bin/python isaacsimenvs/train.py \
 --task Isaacsimenvs-SimToolReal-Direct-v0 \
 --agent rl_games_sapg_cfg_entry_point \
