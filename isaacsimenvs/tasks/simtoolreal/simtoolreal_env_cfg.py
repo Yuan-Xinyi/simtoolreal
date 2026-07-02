@@ -100,6 +100,17 @@ class AssetsCfg:
     object_friction: float = 0.5
     table_friction: float = 0.5
 
+    # PhysX cap (m/s) on the velocity used to resolve interpenetration for the
+    # object. The Isaac Gym config (and the previous bake) used 1000, which lets
+    # PhysX eject an object that spawns overlapping the table/hand at up to
+    # 1000 m/s — this is the reset "launch" of issue #17. The reset-time
+    # clearance/hand-rejection sampling (ResetCfg) reduces how often such
+    # penetration happens; this cap bounds the consequence when a residual
+    # penetration slips through, so it resolves gently over a few substeps
+    # instead of launching. 1.0 matches Isaac Lab's manipulation envs. Set to
+    # 1000.0 to restore Isaac Gym parity.
+    object_max_depenetration_velocity: float = 1.0
+
 # ----------------------------------------------------------------------------
 # obs
 # ----------------------------------------------------------------------------

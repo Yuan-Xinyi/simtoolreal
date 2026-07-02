@@ -1707,7 +1707,10 @@ def setup_scene(env) -> None:
     object_usd_paths = [
         _bake_usd(usd, bake_root, "object", props=dict(
             kinematic_enabled=False, disable_gravity=False,
-            max_depenetration_velocity=1000.0, articulation_enabled=False,
+            # Capped (Isaac Gym uses 1000) so a residual spawn penetration
+            # resolves gently instead of launching the object — see AssetsCfg.
+            max_depenetration_velocity=assets_cfg.object_max_depenetration_velocity,
+            articulation_enabled=False,
         ))
         for usd in object_raw_usds
     ]
