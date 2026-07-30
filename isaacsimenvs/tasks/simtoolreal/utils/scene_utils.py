@@ -75,13 +75,16 @@ HAND_VELOCITY_LIMIT_SIM = 3.14
 assert len(ARM_JOINT_STIFFNESS) == 7 and len(ARM_JOINT_DAMPING) == 7
 assert len(HAND_JOINT_STIFFNESS) == 12 and len(HAND_JOINT_DAMPING) == 12
 
-# Home pose from the xhand repo (user-confirmed there: hand hovers above the
-# tabletop grasp region with the base yawed to face the table — see the base
-# rot in build_robot_articulation_usd_cfg). xArm7 limits: j2 in [-2.18, 2.18],
-# j4 in [-0.11, pi], j6 in [-1.75, pi]; the rest are +-pi.
+# Home pose for the bench-mounted layout (numerically solved via FK
+# coordinate descent, scratch tune_home.py): palm (link7) hovers at world
+# (0, 0.05, 0.80) — ~0.27 m above the tabletop over the object spawn
+# region — with the flange axis pointing down at the table. The xhand
+# repo's original home pose was authored for a floor-level base and folds
+# the arm straight up under this mount, so it was replaced. xArm7 limits:
+# j2 in [-2.18, 2.18], j4 in [-0.11, pi], j6 in [-1.75, pi]; rest +-pi.
 ARM_DEFAULT_JOINT_POS: dict[str, float] = {
-    "joint1": 0.0, "joint2": -0.7494, "joint3": 0.0, "joint4": 1.1920,
-    "joint5": 0.0, "joint6": 1.9414, "joint7": 0.0,
+    "joint1": 0.0, "joint2": -0.3548, "joint3": 0.0, "joint4": 0.465,
+    "joint5": 0.0, "joint6": 1.0688, "joint7": 0.0,
 }
 
 _CONTACT_OFFSET = 0.002
