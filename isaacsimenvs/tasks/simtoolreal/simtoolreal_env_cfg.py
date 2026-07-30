@@ -437,11 +437,13 @@ class ResetCfg:
     delta_goal_distance: float = 0.1
     delta_rotation_degrees: float = 90.0
     # Shrunk from the iiwa14 volume ((-0.35,-0.2,0.6)..(0.35,0.2,0.95)) for the
-    # xArm7's ~0.70 m reach (base at (0, 0.6, 0), see scene_utils): tighter XY
-    # and a 0.80 m z-ceiling keep sampled goals inside the dexterous workspace.
+    # xArm7's ~0.70 m reach, bench-mounted at tabletop height (base at
+    # (0, 0.35, 0.53), see scene_utils): shoulder sits at ~0.80 m, so goals up
+    # to z=0.85 stay reachable while the tighter XY keeps the far corners
+    # inside the dexterous workspace.
     # TODO: sweep with a reachability check / play_zero_agent before training.
     target_volume_mins: tuple[float, float, float] = (-0.25, -0.2, 0.55)
-    target_volume_maxs: tuple[float, float, float] = (0.25, 0.2, 0.80)
+    target_volume_maxs: tuple[float, float, float] = (0.25, 0.2, 0.85)
     target_volume_region_scale: float = 1.0
 
     # Debug only — when set, every reset writes this exact env-local pose

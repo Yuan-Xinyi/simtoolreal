@@ -118,9 +118,10 @@ reset:
   goal_sampling_type: delta           # "delta" | "absolute"
   delta_goal_distance: 0.1
   delta_rotation_degrees: 90.0
-  # Shrunk for the xArm7's ~0.70 m reach (see ResetCfg in simtoolreal_env_cfg.py).
+  # Shrunk for the xArm7's ~0.70 m reach, bench-mounted at tabletop height
+  # (see ResetCfg in simtoolreal_env_cfg.py).
   target_volume_mins: [-0.25, -0.2, 0.55]
-  target_volume_maxs: [0.25, 0.2, 0.80]
+  target_volume_maxs: [0.25, 0.2, 0.85]
   target_volume_region_scale: 1.0
 
 # -----------------------------------------------------------------------------
