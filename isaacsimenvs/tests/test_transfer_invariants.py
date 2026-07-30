@@ -50,6 +50,14 @@ def main() -> None:
     from isaacsimenvs.tasks.simtoolreal.utils import scene_utils
     from isaacsimenvs.tasks.simtoolreal.utils.obs_utils import OBS_FIELD_SIZES
 
+    # Legacy-hardware-only test: the gym-side ground-truth tables
+    # (observation_action_utils_sharpa) exist only for iiwa14+Sharpa. The
+    # xarm7_xhand robot has no Isaac Gym counterpart to check parity against.
+    if "sharpa" not in SimToolRealEnvCfg().assets.robot_urdf:
+        print("[test] SKIP: transfer-invariant checks only apply to the legacy iiwa14+Sharpa robot")
+        app.close()
+        return
+
     # Gym-side ground truth (pure numpy module, importable without isaacgym).
     from isaacgymenvs.utils.observation_action_utils_sharpa import (
         JOINT_NAMES_ISAACGYM,

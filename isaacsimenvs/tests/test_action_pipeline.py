@@ -46,6 +46,13 @@ def main() -> None:
         compute_joint_pos_targets,
     )
 
+    # Legacy-hardware-only test: compute_joint_pos_targets is the gym-side
+    # iiwa14+Sharpa reference; the xarm7_xhand robot has no gym counterpart.
+    if "sharpa" not in SimToolRealEnvCfg().assets.robot_urdf:
+        print("[test] SKIP: action-pipeline parity only applies to the legacy iiwa14+Sharpa robot")
+        app.close()
+        return
+
     cfg = SimToolRealEnvCfg()
     cfg.scene.num_envs = args.num_envs
     cfg.assets.num_assets_per_type = args.num_assets_per_type

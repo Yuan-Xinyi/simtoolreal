@@ -29,105 +29,59 @@ from .generate_objects import generate_handle_head_urdfs
 # Joint names / regexes / body names
 # ----------------------------------------------------------------------------
 
-ARM_JOINT_REGEX = "iiwa14_joint_.*"
-HAND_JOINT_REGEX = "left_.*"
+# xArm7 + XHand right hand (19 DOF: 7 arm + 12 hand). URDF merges the hand
+# onto the arm flange via fixed joints link7 -> link8 -> palm.
+ARM_JOINT_REGEX = "joint[1-7]"
+HAND_JOINT_REGEX = "(thumb|index|middle|ring|pinky)_joint.*"
 
-# Legacy policy order; Isaac Lab tensors are permuted at action/obs boundaries.
+# Canonical policy order: arm base->flange, then thumb/index/middle/ring/pinky
+# proximal->distal (mirrors the legacy iiwa14+Sharpa ordering convention).
+# Isaac Lab tensors are permuted at action/obs boundaries.
 JOINT_NAMES_CANONICAL: tuple[str, ...] = (
-    "iiwa14_joint_1", "iiwa14_joint_2", "iiwa14_joint_3", "iiwa14_joint_4",
-    "iiwa14_joint_5", "iiwa14_joint_6", "iiwa14_joint_7",
-    "left_1_thumb_CMC_FE", "left_thumb_CMC_AA", "left_thumb_MCP_FE",
-    "left_thumb_MCP_AA", "left_thumb_IP",
-    "left_2_index_MCP_FE", "left_index_MCP_AA", "left_index_PIP", "left_index_DIP",
-    "left_3_middle_MCP_FE", "left_middle_MCP_AA", "left_middle_PIP", "left_middle_DIP",
-    "left_4_ring_MCP_FE", "left_ring_MCP_AA", "left_ring_PIP", "left_ring_DIP",
-    "left_5_pinky_CMC", "left_pinky_MCP_FE", "left_pinky_MCP_AA",
-    "left_pinky_PIP", "left_pinky_DIP",
+    "joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7",
+    "thumb_joint0", "thumb_joint1", "thumb_joint2",
+    "index_joint0", "index_joint1", "index_joint2",
+    "middle_joint0", "middle_joint1",
+    "ring_joint0", "ring_joint1",
+    "pinky_joint0", "pinky_joint1",
 )
-assert len(JOINT_NAMES_CANONICAL) == 29
+assert len(JOINT_NAMES_CANONICAL) == 19
 
-PALM_BODY_NAME = "iiwa14_link_7"
-# Merged fingertip bodies land on the DP links in both sims.
-FINGERTIP_BODY_REGEX = "left_(index|middle|ring|thumb|pinky)_DP"
+# The URDF importer runs with merge_fixed_joints=True, so `link8` and `palm`
+# (both fixed) merge into the flange body `link7` — that merged body is the
+# palm frame, mirroring the legacy choice of the iiwa14 flange link.
+PALM_BODY_NAME = "link7"
+# Distal finger bodies (children of the last revolute joint per finger).
+FINGERTIP_BODY_REGEX = "(index_rota_link2|mid_link2|ring_link2|thumb_rota_link2|pinky_link2)"
 FINGERTIP_LINK_NAMES: tuple[str, ...] = (
-    "left_index_DP", "left_middle_DP", "left_ring_DP",
-    "left_thumb_DP", "left_pinky_DP",
+    "index_rota_link2", "mid_link2", "ring_link2",
+    "thumb_rota_link2", "pinky_link2",
 )
 
 
-# Per-joint PD gains and dynamics (verified with pretrained checkpoint).
-ARM_JOINT_STIFFNESS: dict[str, float] = {
-    "iiwa14_joint_1": 600.0, "iiwa14_joint_2": 600.0, "iiwa14_joint_3": 500.0,
-    "iiwa14_joint_4": 400.0, "iiwa14_joint_5": 200.0, "iiwa14_joint_6": 200.0,
-    "iiwa14_joint_7": 200.0,
-}
-ARM_JOINT_DAMPING: dict[str, float] = {
-    "iiwa14_joint_1": 27.027026473513512, "iiwa14_joint_2": 27.027026473513512,
-    "iiwa14_joint_3": 24.672186769721083, "iiwa14_joint_4": 22.067474708266914,
-    "iiwa14_joint_5": 9.752538131173853, "iiwa14_joint_6": 9.147747263670984,
-    "iiwa14_joint_7": 9.147747263670984,
-}
+# PD gains from the xhand repo's XARM7_XHAND_CFG (robots/xarm7_xhand.py).
+# NOTE: unlike the iiwa14+Sharpa values these are NOT sysID-calibrated against
+# the real hardware yet — they are a stable sim starting point. Re-identify
+# before any sim2real transfer.
+ARM_JOINT_STIFFNESS: dict[str, float] = {f"joint{i}": 400.0 for i in range(1, 8)}
+ARM_JOINT_DAMPING: dict[str, float] = {f"joint{i}": 80.0 for i in range(1, 8)}
 
-HAND_JOINT_STIFFNESS: dict[str, float] = {
-    "left_1_thumb_CMC_FE": 6.95, "left_thumb_CMC_AA": 13.2, "left_thumb_MCP_FE": 4.76,
-    "left_thumb_MCP_AA": 6.62, "left_thumb_IP": 0.9,
-    "left_2_index_MCP_FE": 4.76, "left_index_MCP_AA": 6.62,
-    "left_index_PIP": 0.9, "left_index_DIP": 0.9,
-    "left_3_middle_MCP_FE": 4.76, "left_middle_MCP_AA": 6.62,
-    "left_middle_PIP": 0.9, "left_middle_DIP": 0.9,
-    "left_4_ring_MCP_FE": 4.76, "left_ring_MCP_AA": 6.62,
-    "left_ring_PIP": 0.9, "left_ring_DIP": 0.9,
-    "left_5_pinky_CMC": 1.38, "left_pinky_MCP_FE": 4.76, "left_pinky_MCP_AA": 6.62,
-    "left_pinky_PIP": 0.9, "left_pinky_DIP": 0.9,
-}
-HAND_JOINT_DAMPING: dict[str, float] = {
-    "left_1_thumb_CMC_FE": 0.28676845, "left_thumb_CMC_AA": 0.40845109,
-    "left_thumb_MCP_FE": 0.20394083, "left_thumb_MCP_AA": 0.24044435,
-    "left_thumb_IP": 0.04190723,
-    "left_2_index_MCP_FE": 0.20859232, "left_index_MCP_AA": 0.24595532,
-    "left_index_PIP": 0.04243185, "left_index_DIP": 0.03504461,
-    "left_3_middle_MCP_FE": 0.2085923, "left_middle_MCP_AA": 0.24595532,
-    "left_middle_PIP": 0.04243185, "left_middle_DIP": 0.03504461,
-    "left_4_ring_MCP_FE": 0.20859226, "left_ring_MCP_AA": 0.24595528,
-    "left_ring_PIP": 0.04243183, "left_ring_DIP": 0.0350446,
-    "left_5_pinky_CMC": 0.02782345, "left_pinky_MCP_FE": 0.20859229,
-    "left_pinky_MCP_AA": 0.24595528, "left_pinky_PIP": 0.04243183,
-    "left_pinky_DIP": 0.0350446,
-}
-HAND_JOINT_ARMATURE: dict[str, float] = {
-    "left_1_thumb_CMC_FE": 0.0032, "left_thumb_CMC_AA": 0.0032,
-    "left_thumb_MCP_FE": 0.00265, "left_thumb_MCP_AA": 0.00265, "left_thumb_IP": 0.0006,
-    "left_2_index_MCP_FE": 0.00265, "left_index_MCP_AA": 0.00265,
-    "left_index_PIP": 0.0006, "left_index_DIP": 0.00042,
-    "left_3_middle_MCP_FE": 0.00265, "left_middle_MCP_AA": 0.00265,
-    "left_middle_PIP": 0.0006, "left_middle_DIP": 0.00042,
-    "left_4_ring_MCP_FE": 0.00265, "left_ring_MCP_AA": 0.00265,
-    "left_ring_PIP": 0.0006, "left_ring_DIP": 0.00042,
-    "left_5_pinky_CMC": 0.00012, "left_pinky_MCP_FE": 0.00265,
-    "left_pinky_MCP_AA": 0.00265, "left_pinky_PIP": 0.0006, "left_pinky_DIP": 0.00042,
-}
-HAND_JOINT_FRICTION: dict[str, float] = {
-    "left_1_thumb_CMC_FE": 0.132, "left_thumb_CMC_AA": 0.132,
-    "left_thumb_MCP_FE": 0.07456, "left_thumb_MCP_AA": 0.07456, "left_thumb_IP": 0.01276,
-    "left_2_index_MCP_FE": 0.07456, "left_index_MCP_AA": 0.07456,
-    "left_index_PIP": 0.01276, "left_index_DIP": 0.00378738,
-    "left_3_middle_MCP_FE": 0.07456, "left_middle_MCP_AA": 0.07456,
-    "left_middle_PIP": 0.01276, "left_middle_DIP": 0.00378738,
-    "left_4_ring_MCP_FE": 0.07456, "left_ring_MCP_AA": 0.07456,
-    "left_ring_PIP": 0.01276, "left_ring_DIP": 0.00378738,
-    "left_5_pinky_CMC": 0.012, "left_pinky_MCP_FE": 0.07456,
-    "left_pinky_MCP_AA": 0.07456, "left_pinky_PIP": 0.01276, "left_pinky_DIP": 0.00378738,
-}
+HAND_JOINT_NAMES: tuple[str, ...] = JOINT_NAMES_CANONICAL[7:]
+HAND_JOINT_STIFFNESS: dict[str, float] = {name: 3.0 for name in HAND_JOINT_NAMES}
+HAND_JOINT_DAMPING: dict[str, float] = {name: 0.1 for name in HAND_JOINT_NAMES}
+HAND_EFFORT_LIMIT_SIM = 10.0
+HAND_VELOCITY_LIMIT_SIM = 3.14
 
 assert len(ARM_JOINT_STIFFNESS) == 7 and len(ARM_JOINT_DAMPING) == 7
-assert len(HAND_JOINT_STIFFNESS) == 22 and len(HAND_JOINT_DAMPING) == 22
-assert len(HAND_JOINT_ARMATURE) == 22 and len(HAND_JOINT_FRICTION) == 22
+assert len(HAND_JOINT_STIFFNESS) == 12 and len(HAND_JOINT_DAMPING) == 12
 
-# Proven-working default arm pose (isaacsim_conversion/isaacsim_env.py:101-109).
+# Home pose from the xhand repo (user-confirmed there: hand hovers above the
+# tabletop grasp region with the base yawed to face the table — see the base
+# rot in build_robot_articulation_usd_cfg). xArm7 limits: j2 in [-2.18, 2.18],
+# j4 in [-0.11, pi], j6 in [-1.75, pi]; the rest are +-pi.
 ARM_DEFAULT_JOINT_POS: dict[str, float] = {
-    "iiwa14_joint_1": -1.571, "iiwa14_joint_2": 1.571, "iiwa14_joint_3": 0.0,
-    "iiwa14_joint_4": 1.376, "iiwa14_joint_5": 0.0, "iiwa14_joint_6": 1.485,
-    "iiwa14_joint_7": 1.308,
+    "joint1": 0.0, "joint2": -0.7494, "joint3": 0.0, "joint4": 1.1920,
+    "joint5": 0.0, "joint6": 1.9414, "joint7": 0.0,
 }
 
 _CONTACT_OFFSET = 0.002
@@ -153,15 +107,23 @@ def build_robot_articulation_usd_cfg(
 ) -> ArticulationCfg:
     arm_default = dict(ARM_DEFAULT_JOINT_POS)
     if start_arm_higher:
-        # Matches the gym env's startArmHigher eval pose.
-        arm_default["iiwa14_joint_2"] -= math.radians(10.0)
-        arm_default["iiwa14_joint_4"] += math.radians(10.0)
+        # Same +-10deg shoulder/elbow lift pattern as the legacy startArmHigher
+        # eval pose, mapped onto the xArm7 shoulder pitch (joint2) and elbow
+        # (joint4). TODO: verify visually with play_zero_agent before relying
+        # on it for DexToolBench evaluation.
+        arm_default["joint2"] -= math.radians(10.0)
+        arm_default["joint4"] += math.radians(10.0)
     return ArticulationCfg(
         prim_path="/World/envs/env_.*/Robot",
         spawn=UsdFileCfg(usd_path=usd_path),
         init_state=ArticulationCfg.InitialStateCfg(
-            pos=(0.0, 0.8, 0.0),
-            rot=(1.0, 0.0, 0.0, 0.0),
+            # xArm7 reach is ~0.70 m (vs iiwa14 ~0.82 m at 0.8 m from the env
+            # origin), so the base sits closer to the table. Yaw -90deg points
+            # the arm's base +X axis at the table (world -Y), which keeps the
+            # xhand repo's home pose (authored with the object in front of the
+            # base along +X) valid unchanged.
+            pos=(0.0, 0.6, 0.0),
+            rot=(0.70710678, 0.0, 0.0, -0.70710678),
             joint_pos={
                 **arm_default,
                 **{name: 0.0 for name in HAND_JOINT_STIFFNESS},
@@ -178,7 +140,8 @@ def build_robot_articulation_usd_cfg(
                 joint_names_expr=[HAND_JOINT_REGEX],
                 stiffness=HAND_JOINT_STIFFNESS,
                 damping=HAND_JOINT_DAMPING,
-                armature=HAND_JOINT_ARMATURE,
+                effort_limit_sim=HAND_EFFORT_LIMIT_SIM,
+                velocity_limit_sim=HAND_VELOCITY_LIMIT_SIM,
             ),
         },
     )
@@ -1272,44 +1235,98 @@ def _apply_urdf_sdf_collision_markers(
         )
 
 
-def _load_adjacent_links_map() -> dict[str, list[str]]:
-    """Load the gym-side link adjacency map (the link pairs whose self-collision
-    must be filtered) and merge LEFT+RIGHT into one map.
+def _load_adjacent_links_map(
+    robot_urdf_path: str, mass_eps: float = 1e-4
+) -> dict[str, list[str]]:
+    """Derive the adjacent-link map (link pairs whose self-collision must be
+    filtered) from the robot URDF's kinematic tree.
 
-    We load adjacent_links.py by file path: importing it as
-    ``isaacgymenvs.tasks.simtoolreal.adjacent_links`` would trigger
-    ``isaacgymenvs.tasks.__init__`` -> ``from isaacgym import gymapi``, which is
-    absent in ``.venv_isaacsim``. The file itself is pure dict literals.
-    Merging both handednesses is safe: links absent from the imported robot
-    (e.g. the right-hand links for a left-hand URDF) simply find no prim and are
-    skipped.
+    Two rules, verified to reproduce the hand-written
+    ``isaacgymenvs/tasks/simtoolreal/adjacent_links.py`` table exactly on the
+    legacy iiwa14+Sharpa left URDF:
+
+    1. Fixed-joint children fold into their parent's body group (mirrors the
+       importer's ``merge_fixed_joints=True``); every movable joint then
+       contributes one adjacent pair between the merged parent/child bodies.
+    2. Near-massless bodies (< ``mass_eps`` kg, e.g. Sharpa's 1e-6 kg ``*_VL``
+       virtual links) are additionally contracted: their neighbors get bridged
+       pairs, since a virtual link's collision cannot separate the real bodies
+       on either side of it.
     """
-    import importlib.util
+    import xml.etree.ElementTree as ET
 
-    from isaacgymenvs.utils.utils import get_repo_root_dir
+    root = ET.parse(robot_urdf_path).getroot()
+    joints = [
+        (
+            j.find("parent").attrib["link"],
+            j.find("child").attrib["link"],
+            j.attrib.get("type", "fixed"),
+        )
+        for j in root.findall("joint")
+    ]
 
-    path = get_repo_root_dir() / "isaacgymenvs/tasks/simtoolreal/adjacent_links.py"
-    spec = importlib.util.spec_from_file_location("_simtoolreal_adjacent_links", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    def _link_mass(link) -> float:
+        mass_el = link.find("inertial/mass")
+        return float(mass_el.attrib["value"]) if mass_el is not None else 0.0
 
-    merged: dict[str, list[str]] = {}
-    for src in (
-        mod.LEFT_SHARPA_KUKA_LINK_TO_ADJACENT_LINKS,
-        mod.RIGHT_SHARPA_KUKA_LINK_TO_ADJACENT_LINKS,
-    ):
-        for link, neighbors in src.items():
-            merged.setdefault(link, [])
+    # Fold fixed-joint children into their parent's body group (transitively).
+    group: dict[str, str] = {}
+
+    def _resolve(link: str) -> str:
+        while link in group:
+            link = group[link]
+        return link
+
+    for parent, child, jtype in joints:
+        if jtype == "fixed":
+            group[child] = parent
+
+    group_mass: dict[str, float] = {}
+    for link in root.findall("link"):
+        g = _resolve(link.attrib["name"])
+        group_mass[g] = group_mass.get(g, 0.0) + _link_mass(link)
+
+    adjacency: dict[str, set[str]] = {}
+
+    def _add_pair(a: str, b: str) -> None:
+        adjacency.setdefault(a, set()).add(b)
+        adjacency.setdefault(b, set()).add(a)
+
+    for parent, child, jtype in joints:
+        if jtype == "fixed":
+            continue
+        a, b = _resolve(parent), _resolve(child)
+        if a != b:
+            _add_pair(a, b)
+
+    # Bridge across near-massless (virtual) bodies: contract them on a copy of
+    # the graph, then union the bridged pairs back in.
+    work = {k: set(v) for k, v in adjacency.items()}
+    changed = True
+    while changed:
+        changed = False
+        for node in list(work):
+            if group_mass.get(node, 0.0) >= mass_eps:
+                continue
+            neighbors = work.pop(node)
             for nb in neighbors:
-                if nb not in merged[link]:
-                    merged[link].append(nb)
-    return merged
+                work[nb].discard(node)
+            for a in neighbors:
+                for b in neighbors:
+                    if a != b:
+                        work[a].add(b)
+            changed = True
+    for node, neighbors in work.items():
+        for nb in neighbors:
+            _add_pair(node, nb)
+
+    return {k: sorted(v) for k, v in adjacency.items()}
 
 
-def _apply_self_collision_filters(usd_path: str) -> None:
-    """Author USD ``FilteredPairsAPI`` on the robot's articulation links so the
-    adjacent-link pairs in ``adjacent_links.py`` do NOT self-collide — mirroring
-    Isaac Gym, which enables all self-collisions then masks adjacent links.
+def _apply_self_collision_filters(usd_path: str, robot_urdf_path: str) -> None:
+    """Author USD ``FilteredPairsAPI`` on the robot's articulation links so
+    kinematically adjacent link pairs do NOT self-collide — mirroring Isaac
+    Gym, which enables all self-collisions then masks adjacent links.
 
     Only effective when the articulation has self-collision enabled
     (``enabled_self_collisions=True`` + URDF import ``self_collision=True``).
@@ -1319,7 +1336,7 @@ def _apply_self_collision_filters(usd_path: str) -> None:
     """
     from pxr import Usd, UsdPhysics
 
-    adjacency = _load_adjacent_links_map()
+    adjacency = _load_adjacent_links_map(robot_urdf_path)
 
     raw_usd_path = Path(usd_path)
     physics_usd_path = raw_usd_path.parent / "configuration" / f"{raw_usd_path.stem}_physics.usd"
@@ -1727,9 +1744,9 @@ def setup_scene(env) -> None:
         joint_drive=_robot_joint_drive_cfg(),
     )
     # Isaac Gym enables all robot self-collisions then masks adjacent links; mirror
-    # that by authoring FilteredPairsAPI for the adjacent_links.py pairs before the
-    # bake (PhysX additionally auto-filters directly-jointed parent/child links).
-    _apply_self_collision_filters(robot_converted_usd)
+    # that by authoring FilteredPairsAPI for the URDF-derived adjacent pairs before
+    # the bake (PhysX additionally auto-filters directly-jointed parent/child links).
+    _apply_self_collision_filters(robot_converted_usd, assets_cfg.robot_urdf)
     robot_usd_path = _bake_usd(
         robot_converted_usd,
         bake_root, "robot",

@@ -3,9 +3,9 @@
 # -----------------------------------------------------------------------------
 decimation: 2
 episode_length_s: 10.0
-action_space: 29
+action_space: 19  # 7-DOF xArm7 + 12-DOF XHand
 # observation_space / state_space are computed in SimToolRealEnv.__init__ from
-# obs.obs_list / obs.state_list (see Phase D). Configclass defaults (140/140)
+# obs.obs_list / obs.state_list (see Phase D). Configclass defaults (110/132)
 # act only as transient placeholders before __init__ overwrites them.
 
 # -----------------------------------------------------------------------------
@@ -44,7 +44,7 @@ scene:
 # 3) assets — URDFs, procedural-generation knobs, static per-material frictions
 # -----------------------------------------------------------------------------
 assets:
-  robot_urdf: "assets/urdf/kuka_sharpa_description/iiwa14_left_sharpa_adjusted_restricted.urdf"
+  robot_urdf: "assets/urdf/xarm7_xhand/xarm7_xhand.urdf"
   table_urdf: "assets/urdf/table_narrow.urdf"
 
   object_name: "handle_head_primitives"
@@ -118,8 +118,9 @@ reset:
   goal_sampling_type: delta           # "delta" | "absolute"
   delta_goal_distance: 0.1
   delta_rotation_degrees: 90.0
-  target_volume_mins: [-0.35, -0.2, 0.6]
-  target_volume_maxs: [0.35, 0.2, 0.95]
+  # Shrunk for the xArm7's ~0.70 m reach (see ResetCfg in simtoolreal_env_cfg.py).
+  target_volume_mins: [-0.25, -0.2, 0.55]
+  target_volume_maxs: [0.25, 0.2, 0.80]
   target_volume_region_scale: 1.0
 
 # -----------------------------------------------------------------------------

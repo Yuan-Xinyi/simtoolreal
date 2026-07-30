@@ -14,15 +14,21 @@ from isaaclab.utils.math import convert_quat, quat_apply, quat_from_angle_axis, 
 # ----------------------------------------------------------------------------
 
 
-NUM_JOINTS: int = 29
+NUM_JOINTS: int = 19  # == len(scene_utils.JOINT_NAMES_CANONICAL): xArm7 (7) + XHand (12)
 NUM_FINGERTIPS: int = 5
 NUM_KEYPOINTS: int = 4
 
-# Policy was trained against the palm center, not the raw wrist body.
-PALM_CENTER_OFFSET: tuple[float, float, float] = (-0.0, -0.02, 0.16)
+# Palm-center offset in the PALM_BODY_NAME (link7 flange) frame. The XHand
+# palm frame is coincident with the flange (hand_mount has zero translation),
+# so this reaches from the flange toward the palm surface center.
+# TODO(xhand): eyeball-verify with pose_viewer / play_zero_agent and refine
+# (legacy Sharpa value was (0, -0.02, 0.16) from the iiwa14 flange).
+PALM_CENTER_OFFSET: tuple[float, float, float] = (0.0, 0.0, 0.11)
 
 # Shift fingertip body origins to the approximate pad centers.
-FINGERTIP_OFFSET: tuple[float, float, float] = (0.02, 0.002, 0.0)
+# TODO(xhand): measure for the XHand *_rota_link2 / *_link2 distal bodies;
+# zero is a safe starting point (legacy Sharpa pad offset was (0.02, 0.002, 0)).
+FINGERTIP_OFFSET: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 # Object-frame keypoint corners before scaling.
 KEYPOINT_CORNERS: tuple[tuple[int, int, int], ...] = (

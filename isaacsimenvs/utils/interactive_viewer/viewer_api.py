@@ -249,7 +249,7 @@ def write_pose_viewer_html(path: Path, payload: dict, *, title: str) -> str:
 
     robot_urdf_url = (
         github_raw_base
-        + "assets/urdf/kuka_sharpa_description/iiwa14_left_sharpa_adjusted_restricted.urdf"
+        + "assets/urdf/xarm7_xhand/xarm7_xhand.urdf"
     )
     object_urdf_url = (
         github_raw_base

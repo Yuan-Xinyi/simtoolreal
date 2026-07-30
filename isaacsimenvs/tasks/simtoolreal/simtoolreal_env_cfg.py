@@ -54,9 +54,7 @@ from isaaclab.utils import configclass
 
 @configclass
 class AssetsCfg:
-    robot_urdf: str = (
-        "assets/urdf/kuka_sharpa_description/iiwa14_left_sharpa_adjusted_restricted.urdf"
-    )
+    robot_urdf: str = "assets/urdf/xarm7_xhand/xarm7_xhand.urdf"
     table_urdf: str = "assets/urdf/table_narrow.urdf"
     # Per-env scale ranges applied to the table mesh at scene-build time.
     # Sampled independently per env: sx ~ U(table_scale_range_x), sy ~ U(table_scale_range_y).
@@ -242,7 +240,7 @@ class StudentObsCfg:
     # The URDF importer attaches the visual-origin xform (e.g.
     # `<origin xyz="0 0 0.38"/>` on a table) at the `/box/visuals` level;
     # targeting the rigid body root collapses across that xform and the
-    # raycaster places the geometry at z=0 instead. For the iiwa+sharpa
+    # raycaster places the geometry at z=0 instead. For the xarm7+xhand
     # articulation we use `.*` to pick up every link's `/visuals` child —
     # the MultiMeshRayCaster creates a view that tracks each matched prim's
     # world pose independently, so articulation joints update per step.
@@ -255,13 +253,18 @@ class StudentObsCfg:
         # `/visuals` group; multi-link URDFs (fabrica) match each link's
         # `/visuals` group independently, which is what we want.
         "/World/envs/env_.*/Object/.*/visuals",
-        # iiwa arm + sharpa hand link visuals. Explicit prefixes (not a
+        # xArm7 arm + XHand link visuals. Explicit prefixes (not a
         # broad `/Robot/.*/visuals`) so the parser doesn't try to make
         # rigid-body views for non-link prims like `/Robot/Looks` /
         # `/Robot/joints` (those stall sensor init for several minutes
-        # with PhysX retries before timing out).
-        "/World/envs/env_.*/Robot/iiwa14_link_.*/visuals",
-        "/World/envs/env_.*/Robot/left_.*/visuals",
+        # with PhysX retries before timing out). `link.*` covers link_base
+        # and link1-7 (link8 + palm merge into link7 at import).
+        "/World/envs/env_.*/Robot/link.*/visuals",
+        "/World/envs/env_.*/Robot/thumb_.*/visuals",
+        "/World/envs/env_.*/Robot/index_.*/visuals",
+        "/World/envs/env_.*/Robot/mid_.*/visuals",
+        "/World/envs/env_.*/Robot/ring_.*/visuals",
+        "/World/envs/env_.*/Robot/pinky_.*/visuals",
     )
     # Rays that don't intersect any mesh return max_distance (instead of NaN)
     # when `depth_clipping_behavior == "max"`. Keep at the rasterizer's default
@@ -433,8 +436,12 @@ class ResetCfg:
     goal_sampling_type: str = "delta"  # "delta" | "absolute"
     delta_goal_distance: float = 0.1
     delta_rotation_degrees: float = 90.0
-    target_volume_mins: tuple[float, float, float] = (-0.35, -0.2, 0.6)
-    target_volume_maxs: tuple[float, float, float] = (0.35, 0.2, 0.95)
+    # Shrunk from the iiwa14 volume ((-0.35,-0.2,0.6)..(0.35,0.2,0.95)) for the
+    # xArm7's ~0.70 m reach (base at (0, 0.6, 0), see scene_utils): tighter XY
+    # and a 0.80 m z-ceiling keep sampled goals inside the dexterous workspace.
+    # TODO: sweep with a reachability check / play_zero_agent before training.
+    target_volume_mins: tuple[float, float, float] = (-0.25, -0.2, 0.55)
+    target_volume_maxs: tuple[float, float, float] = (0.25, 0.2, 0.80)
     target_volume_region_scale: float = 1.0
 
     # Debug only — when set, every reset writes this exact env-local pose
@@ -590,12 +597,12 @@ class SimToolRealEnvCfg(DirectRLEnvCfg):
     # --- DirectRLEnvCfg required fields ---
     decimation: int = 2  # 2 physics substeps per policy step
     episode_length_s: float = 10.0  # 600 policy steps * 2 * (1/120) = 10s
-    action_space: int = 29  # 7-DOF IIWA + 22-DOF SHARPA hand
+    action_space: int = 19  # 7-DOF xArm7 + 12-DOF XHand
     # Obs/state sizes are derived from obs.obs_list / obs.state_list at env init.
     # Placeholder keeps the configclass instantiable before the env computes the
-    # final spaces.
-    observation_space: int = 140
-    state_space: int = 140
+    # final spaces (110/132 with the default lists at NUM_JOINTS=19).
+    observation_space: int = 110
+    state_space: int = 132
 
     # --- Isaac Lab base fields ---
     sim: SimulationCfg = _default_sim_cfg()
