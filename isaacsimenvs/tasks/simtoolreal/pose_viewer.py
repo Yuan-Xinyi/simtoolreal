@@ -368,6 +368,12 @@ class SimToolRealPoseViewerWrapper(gym.Wrapper):
         inner = self.env.unwrapped
         if not hasattr(inner, "get_student_obs"):
             return None
+        # Student obs is opt-in (distillation only). When disabled,
+        # get_student_obs() raises on every captured frame — skip quietly here
+        # instead of spamming the log during teacher training.
+        student_cfg = getattr(inner.cfg, "student_obs", None)
+        if student_cfg is not None and not getattr(student_cfg, "enabled", False):
+            return None
         try:
             student_obs = inner.get_student_obs()
         except Exception as exc:

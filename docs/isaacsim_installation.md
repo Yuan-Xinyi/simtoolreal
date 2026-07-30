@@ -17,7 +17,11 @@ uv venv .venv_isaacsim --python 3.11
 # PyTorch for CUDA 12.6 (Isaac Sim 5.x is built against this)
 uv pip install --python .venv_isaacsim/bin/python torch --index-url https://download.pytorch.org/whl/cu126
 
-# Vendored rl_games + inference deps
+# Vendored rl_games + inference deps.
+# Do NOT skip this: train.py / eval do `from rl_games.torch_runner import Runner`,
+# and the repo's `rl_games/` wrapper dir on sys.path (from the editable root
+# install below) otherwise resolves `import rl_games` to an empty namespace
+# package — imports of `rl_games.*` submodules then fail at runtime.
 uv pip install --python .venv_isaacsim/bin/python -e ./rl_games/
 uv pip install --python .venv_isaacsim/bin/python \
   omegaconf hydra-core "gym==0.23.1" scipy numpy yourdfpy requests tqdm tyro "imageio[ffmpeg]" wandb termcolor
@@ -40,15 +44,46 @@ uv pip install --python .venv_isaacsim/bin/python -e . --no-deps
 
 Keep the version pins exact (`isaaclab==2.3.2.post1`, torch 2.7.x+cu126) — newer Isaac Lab releases change `DirectRLEnv` / `UrdfConverter` APIs that `isaacsimenvs` depends on.
 
-Verify:
+**`numpy<2` guard.** `isaaclab` requires `numpy<2`. If you ever (re)install
+`rl_games` *after* isaaclab, its `opencv-python` dep can resolve to opencv 5.x,
+which drags in `numpy>=2` and silently breaks Isaac Lab (`import isaaclab` then
+fails). If that happens, pin back down:
 
 ```bash
-.venv_isaacsim/bin/python -c "
-import torch, isaaclab, isaacsimenvs
-print('torch:', torch.__version__, 'cuda:', torch.cuda.is_available())
-print('isaaclab:', isaaclab.__file__)
-"
+uv pip install --python .venv_isaacsim/bin/python "numpy<2" "opencv-python<5"
 ```
+
+Verify. Note the import order: `isaacsimenvs` (and any `isaaclab.envs` /
+`isaaclab.sim` sub-namespace) only resolves *after* `AppLauncher` boots — see
+[Gotchas](#gotchas) — so the check has to launch a headless app before importing
+the repo package, not just `import` it in a bare `python -c`:
+
+```bash
+OMNI_KIT_ACCEPT_EULA=YES .venv_isaacsim/bin/python - <<'PY'
+import argparse, os, sys
+import torch
+from isaaclab.app import AppLauncher
+
+parser = argparse.ArgumentParser()
+AppLauncher.add_app_launcher_args(parser)
+app = AppLauncher(parser.parse_args(["--headless"])).app
+
+import isaaclab, isaaclab.envs  # noqa: F401
+import isaacsimenvs             # noqa: F401  triggers gym.register(...)
+
+print("torch:", torch.__version__, "cuda:", torch.cuda.is_available())
+print("isaaclab:", isaaclab.__file__)
+print("VERIFY OK")
+
+del app
+sys.stdout.flush(); sys.stderr.flush()
+os._exit(0)  # Kit teardown can hang; force-exit
+PY
+```
+
+A bare `.venv_isaacsim/bin/python -c "import torch, isaaclab, isaacsimenvs"`
+fails with `ModuleNotFoundError: No module named 'isaaclab.envs'` — that's the
+import-order gotcha, not a broken install.
 
 ## Running
 
