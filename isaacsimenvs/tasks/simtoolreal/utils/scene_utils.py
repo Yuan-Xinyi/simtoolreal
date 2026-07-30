@@ -120,18 +120,17 @@ def build_robot_articulation_usd_cfg(
         prim_path="/World/envs/env_.*/Robot",
         spawn=UsdFileCfg(usd_path=usd_path),
         init_state=ArticulationCfg.InitialStateCfg(
-            # Bench-mounted at tabletop height: the xArm7's shoulder is only
-            # ~0.27 m above its base (vs ~0.36 m for the floor-standing
-            # iiwa14), so a floor mount would put the shoulder below the
-            # tabletop. z = 0.53 = table_reset_z (0.38, box center) + half the
-            # table_narrow box height (0.15). The base is fixed (fix_base), so
-            # no physical stand is needed in sim; y = 0.35 leaves 0.15 m
-            # clearance to the table's near edge (y = 0.2) and puts the far
-            # edge 0.55 m away — inside the ~0.70 m reach. Yaw -90deg points
-            # the arm's base +X axis at the table (world -Y), which keeps the
-            # xhand repo's home pose (authored with the object in front of the
-            # base along +X) valid unchanged.
-            pos=(0.0, 0.35, 0.53),
+            # Bench-mounted, matching the real rig: the base plate sits ON the
+            # work surface, ~1 cm proud of it. z = 0.54 = tabletop (table_reset_z
+            # 0.38 box center + 0.15 half-height = 0.53) + 0.01 base plate.
+            # (A floor mount is a non-starter: the xArm7 shoulder is only
+            # ~0.27 m above its base, below the tabletop.) The base is fixed
+            # (fix_base), so no physical stand is modeled in sim; y = 0.35
+            # means the real base plate center sits 0.35 m behind the object
+            # workspace center — far table edge 0.55 m away, inside the
+            # ~0.70 m reach. Yaw -90deg points the arm's base +X axis at the
+            # table (world -Y), keeping the solved home pose valid.
+            pos=(0.0, 0.35, 0.54),
             rot=(0.70710678, 0.0, 0.0, -0.70710678),
             joint_pos={
                 **arm_default,
