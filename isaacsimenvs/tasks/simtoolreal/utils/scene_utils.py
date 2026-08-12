@@ -92,6 +92,11 @@ HAND_JOINT_DAMPING: dict[str, float] = {name: 0.1 for name in HAND_JOINT_NAMES}
 # Mirrors Sharpa's armature by joint role: base/spread joints get the CMC/MCP
 # value, distal joints the IP/DIP value. With K=3.0, D=0.1 this yields
 # omega 34-71 rad/s and zeta 0.56-1.18 — the Sharpa profile.
+# CAVEAT: the XHand1 manual describes a "full-gear Quasi-Direct Drive"
+# transmission, and QDD's low reduction ratio reflects far less rotor inertia
+# than a harmonic drive — the true armature may be an order of magnitude
+# smaller than these. Lowering them without also retuning K/D would push
+# omega*dt back up, so treat this as a sysID target, not a settled value.
 HAND_JOINT_ARMATURE: dict[str, float] = {
     "thumb_joint0": 0.0032, "thumb_joint1": 0.00265, "thumb_joint2": 0.0006,
     "index_joint0": 0.00265, "index_joint1": 0.00265, "index_joint2": 0.0006,
@@ -99,7 +104,18 @@ HAND_JOINT_ARMATURE: dict[str, float] = {
     "ring_joint0": 0.00265, "ring_joint1": 0.0006,
     "pinky_joint0": 0.00265, "pinky_joint1": 0.0006,
 }
-HAND_EFFORT_LIMIT_SIM = 10.0
+# Per-joint torque ceilings derived from the XHand1 product manual: single-
+# finger max load 50 N, times each joint's measured lever arm to the fingertip
+# pad (37 mm at the distal joints, 93 mm at the proximal, 111-122 mm at the
+# base/abduction joints). Replaces a flat 10 Nm placeholder, which would have
+# let the policy learn grips the real hand cannot reproduce.
+HAND_EFFORT_LIMIT_SIM: dict[str, float] = {
+    "thumb_joint0": 6.1, "thumb_joint1": 4.6, "thumb_joint2": 1.9,
+    "index_joint0": 5.5, "index_joint1": 4.6, "index_joint2": 1.9,
+    "middle_joint0": 4.6, "middle_joint1": 1.9,
+    "ring_joint0": 4.6, "ring_joint1": 1.9,
+    "pinky_joint0": 4.6, "pinky_joint1": 1.9,
+}
 HAND_VELOCITY_LIMIT_SIM = 3.14
 
 assert len(ARM_JOINT_STIFFNESS) == 7 and len(ARM_JOINT_DAMPING) == 7
