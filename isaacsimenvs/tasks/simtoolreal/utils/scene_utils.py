@@ -1278,6 +1278,62 @@ def _apply_urdf_sdf_collision_markers(
         )
 
 
+def _downgrade_collider_approximation(
+    usd_path: str, mesh_stems: set[str], exclude_prefixes: tuple[str, ...] = ()
+) -> None:
+    """Set ``convexHull`` on the collision prims sourced from ``mesh_stems``.
+
+    Convex decomposition is only worth its cost where concavity changes what
+    the policy can grasp — the hand. Decomposing the arm too costs 16 collision
+    shapes per link for no benefit, and at 24576 envs that overflowed the GPU
+    (45.5 GB of 47.4 GB before the training tensors were even allocated).
+
+    ``exclude_prefixes`` guards the merged bodies: the palm's collision prims
+    live under ``/link7`` after ``merge_fixed_joints``, so matching the link
+    component alone would also flatten the palm — whose inner face is concave
+    (1.85x hull inflation) and does bear on grasps.
+    """
+    from pxr import Usd, UsdPhysics
+
+    raw_usd_path = Path(usd_path)
+    physics_usd_path = raw_usd_path.parent / "configuration" / f"{raw_usd_path.stem}_physics.usd"
+    edit_usd_path = physics_usd_path if physics_usd_path.exists() else raw_usd_path
+
+    stage = Usd.Stage.Open(str(edit_usd_path), Usd.Stage.LoadAll)
+    if stage is None:
+        raise RuntimeError(f"Failed to open USD while setting collider approximation: {edit_usd_path}")
+    stage.Load()
+
+    # The converter emits the cooked STL nodes inside instanced subtrees, and
+    # USD refuses edits through an instance proxy *or* a prototype. De-instance
+    # first; this stage is an intermediate that Isaac Lab clones per-env itself
+    # (replicate_physics=False), so instancing here buys nothing at runtime.
+    for prim in Usd.PrimRange(stage.GetPseudoRoot(), Usd.TraverseInstanceProxies()):
+        if prim.IsInstance():
+            prim.SetInstanceable(False)
+
+    changed = 0
+    for prim in Usd.PrimRange(stage.GetPseudoRoot(), Usd.TraverseInstanceProxies()):
+        if prim.IsInstanceProxy() or not prim.HasAPI(UsdPhysics.MeshCollisionAPI):
+            continue
+        parts = [p for p in prim.GetPath().pathString.split("/") if p]
+        if exclude_prefixes and any(p.startswith(exclude_prefixes) for p in parts):
+            continue
+        if not any(p in mesh_stems for p in parts):
+            continue
+        attr = UsdPhysics.MeshCollisionAPI(prim).GetApproximationAttr()
+        if attr:
+            attr.Set("convexHull")
+            changed += 1
+
+    stage.GetRootLayer().Save()
+    print(
+        f"[scene_utils] collider approximation: set convexHull on {changed} arm "
+        f"collision prims in {edit_usd_path.name} (hand keeps convexDecomposition)",
+        flush=True,
+    )
+
+
 def _load_adjacent_links_map(
     robot_urdf_path: str, mass_eps: float = 1e-4
 ) -> dict[str, list[str]]:
@@ -1796,6 +1852,12 @@ def setup_scene(env) -> None:
         # collision proxies, 1.00-1.27x, so a plain hull was fine there.)
         collider_type="convex_decomposition",
         joint_drive=_robot_joint_drive_cfg(),
+    )
+    # ...but only the hand needs it — see _downgrade_collider_approximation.
+    _downgrade_collider_approximation(
+        robot_converted_usd,
+        mesh_stems={"link_base", *(f"link{i}" for i in range(1, 9))},
+        exclude_prefixes=("right_hand",),
     )
     # Isaac Gym enables all robot self-collisions then masks adjacent links; mirror
     # that by authoring FilteredPairsAPI for the URDF-derived adjacent pairs before
