@@ -52,28 +52,61 @@ assert len(JOINT_NAMES_CANONICAL) == 19
 # palm frame, mirroring the legacy choice of the iiwa14 flange link.
 PALM_BODY_NAME = "link7"
 # Distal finger bodies (children of the last revolute joint per finger).
-FINGERTIP_BODY_REGEX = "(index_rota_link2|mid_link2|ring_link2|thumb_rota_link2|pinky_link2)"
+# Order is load-bearing: obs_utils.FINGERTIP_OFFSET is indexed positionally
+# against this tuple, and reset_utils resolves body ids with preserve_order.
 FINGERTIP_LINK_NAMES: tuple[str, ...] = (
     "index_rota_link2", "mid_link2", "ring_link2",
     "thumb_rota_link2", "pinky_link2",
 )
 
 
-# PD gains from the xhand repo's XARM7_XHAND_CFG (robots/xarm7_xhand.py).
-# NOTE: unlike the iiwa14+Sharpa values these are NOT sysID-calibrated against
-# the real hardware yet — they are a stable sim starting point. Re-identify
-# before any sim2real transfer.
+# Actuator gains. NOT sysID-calibrated against the real hardware yet — but
+# unlike the xhand repo's original flat values these are chosen so the
+# closed-loop response matches the *shape* of the iiwa14+Sharpa reference that
+# trained successfully: every joint critically-ish damped (zeta ~0.8) with a
+# natural frequency well inside the 120 Hz integrator's stable band.
+#
+# Armature is the motor rotor inertia reflected through the gear reduction
+# (N^2 * J_rotor). It is physically real and, for small finger joints, it
+# DOMINATES the link inertia. Omitting it (the xhand repo's config did) leaves
+# each XHand joint with only its ~2e-6 kg m^2 link inertia, giving
+# omega = sqrt(K/I) up to 1225 rad/s — omega*dt = 10 at 120 Hz, far outside
+# the range any solver handles cleanly — and zeta up to 20 (fingers so
+# overdamped they barely close). Sharpa's armature (4.2e-4 .. 3.2e-3) is what
+# kept its joints at omega ~40-107 rad/s, zeta ~0.9.
+ARM_JOINT_ARMATURE: dict[str, float] = {
+    # Chosen so effective inertia (link + armature) is ~0.12 kg m^2 at every
+    # arm joint; link inertia alone falls from 0.114 (joint1) to 0.0006
+    # (joint7), which would otherwise put the wrist at omega = 840 rad/s.
+    "joint1": 0.006, "joint2": 0.015, "joint3": 0.056, "joint4": 0.067,
+    "joint5": 0.104, "joint6": 0.110, "joint7": 0.119,
+}
 ARM_JOINT_STIFFNESS: dict[str, float] = {f"joint{i}": 400.0 for i in range(1, 8)}
-ARM_JOINT_DAMPING: dict[str, float] = {f"joint{i}": 80.0 for i in range(1, 8)}
+# zeta = D / (2*sqrt(K*I_eff)) = 0.8 at I_eff = 0.12, K = 400.
+# (Was a flat 80.0, i.e. zeta 5.9 at the shoulder and 84 at the wrist.)
+ARM_JOINT_DAMPING: dict[str, float] = {f"joint{i}": 11.1 for i in range(1, 8)}
 
 HAND_JOINT_NAMES: tuple[str, ...] = JOINT_NAMES_CANONICAL[7:]
 HAND_JOINT_STIFFNESS: dict[str, float] = {name: 3.0 for name in HAND_JOINT_NAMES}
 HAND_JOINT_DAMPING: dict[str, float] = {name: 0.1 for name in HAND_JOINT_NAMES}
+# Mirrors Sharpa's armature by joint role: base/spread joints get the CMC/MCP
+# value, distal joints the IP/DIP value. With K=3.0, D=0.1 this yields
+# omega 34-71 rad/s and zeta 0.56-1.18 — the Sharpa profile.
+HAND_JOINT_ARMATURE: dict[str, float] = {
+    "thumb_joint0": 0.0032, "thumb_joint1": 0.00265, "thumb_joint2": 0.0006,
+    "index_joint0": 0.00265, "index_joint1": 0.00265, "index_joint2": 0.0006,
+    "middle_joint0": 0.00265, "middle_joint1": 0.0006,
+    "ring_joint0": 0.00265, "ring_joint1": 0.0006,
+    "pinky_joint0": 0.00265, "pinky_joint1": 0.0006,
+}
 HAND_EFFORT_LIMIT_SIM = 10.0
 HAND_VELOCITY_LIMIT_SIM = 3.14
 
 assert len(ARM_JOINT_STIFFNESS) == 7 and len(ARM_JOINT_DAMPING) == 7
+assert len(ARM_JOINT_ARMATURE) == 7
 assert len(HAND_JOINT_STIFFNESS) == 12 and len(HAND_JOINT_DAMPING) == 12
+assert len(HAND_JOINT_ARMATURE) == 12
+assert set(HAND_JOINT_ARMATURE) == set(HAND_JOINT_NAMES)
 
 # Home pose for the bench-mounted layout (numerically solved via FK
 # coordinate descent, scratch tune_home.py): palm (link7) hovers at world
@@ -143,11 +176,13 @@ def build_robot_articulation_usd_cfg(
                 joint_names_expr=[ARM_JOINT_REGEX],
                 stiffness=ARM_JOINT_STIFFNESS,
                 damping=ARM_JOINT_DAMPING,
+                armature=ARM_JOINT_ARMATURE,
             ),
             "hand": ImplicitActuatorCfg(
                 joint_names_expr=[HAND_JOINT_REGEX],
                 stiffness=HAND_JOINT_STIFFNESS,
                 damping=HAND_JOINT_DAMPING,
+                armature=HAND_JOINT_ARMATURE,
                 effort_limit_sim=HAND_EFFORT_LIMIT_SIM,
                 velocity_limit_sim=HAND_VELOCITY_LIMIT_SIM,
             ),
@@ -1450,6 +1485,7 @@ def _convert_urdf_to_usd(
     fix_base: bool,
     self_collision: bool | None = None,
     replace_cylinders_with_capsules: bool = False,
+    collider_type: str = "convex_hull",
     joint_drive=None,
 ) -> str:
     converter_asset_path = _prepare_urdf_for_isaacsim(asset_path, usd_work_dir)
@@ -1461,6 +1497,7 @@ def _convert_urdf_to_usd(
         merge_fixed_joints=True,
         make_instanceable=False,
         replace_cylinders_with_capsules=replace_cylinders_with_capsules,
+        collider_type=collider_type,
         joint_drive=joint_drive,
     )
     if self_collision is not None:
@@ -1749,6 +1786,15 @@ def setup_scene(env) -> None:
     robot_converted_usd = _convert_urdf_to_usd(
         assets_cfg.robot_urdf, usd_work_dir,
         fix_base=True, self_collision=True,
+        # Convex DECOMPOSITION, not a single hull per link. The XHand reuses its
+        # detailed visual mesh as the collision mesh, and its fingers are curved:
+        # a single convex hull inflates each link 1.5-3.5x (distal links 2.06x)
+        # and fills the concave inner face plus the inter-segment gaps, so an
+        # object rests on an invisible bulge instead of the fingertip pad — the
+        # policy then learns to wedge objects in the finger gaps rather than
+        # pinch them. (The legacy Sharpa hand shipped purpose-built convex
+        # collision proxies, 1.00-1.27x, so a plain hull was fine there.)
+        collider_type="convex_decomposition",
         joint_drive=_robot_joint_drive_cfg(),
     )
     # Isaac Gym enables all robot self-collisions then masks adjacent links; mirror

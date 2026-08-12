@@ -18,17 +18,25 @@ NUM_JOINTS: int = 19  # == len(scene_utils.JOINT_NAMES_CANONICAL): xArm7 (7) + X
 NUM_FINGERTIPS: int = 5
 NUM_KEYPOINTS: int = 4
 
-# Palm-center offset in the PALM_BODY_NAME (link7 flange) frame. The XHand
-# palm frame is coincident with the flange (hand_mount has zero translation),
-# so this reaches from the flange toward the palm surface center.
-# TODO(xhand): eyeball-verify with pose_viewer / play_zero_agent and refine
-# (legacy Sharpa value was (0, -0.02, 0.16) from the iiwa14 flange).
-PALM_CENTER_OFFSET: tuple[float, float, float] = (0.0, 0.0, 0.11)
+# Palm-grasp-center offset in the PALM_BODY_NAME (link7 flange) frame, i.e.
+# the point the five fingers close around. Measured as the mean of the five
+# finger-base joint origins, mapped through hand_mount's -90deg z rotation
+# into the flange frame. (Legacy Sharpa used (0, -0.02, 0.16) off the iiwa14
+# flange; the XHand is a shorter hand, hence the smaller z.)
+PALM_CENTER_OFFSET: tuple[float, float, float] = (-0.007, 0.0, 0.087)
 
-# Shift fingertip body origins to the approximate pad centers.
-# TODO(xhand): measure for the XHand *_rota_link2 / *_link2 distal bodies;
-# zero is a safe starting point (legacy Sharpa pad offset was (0.02, 0.002, 0)).
-FINGERTIP_OFFSET: tuple[float, float, float] = (0.0, 0.0, 0.0)
+# Fingertip pad centers, per finger, in each distal body's own frame — the
+# centroid of the distal portion of that link's mesh. Ordered to match
+# FINGERTIP_LINK_NAMES. The thumb needs its own entry because its pad lies
+# along +X while the four fingers' pads lie along +Z.
+# Shape (5, 3) broadcasts to (num_envs, 5, 3) in _apply_local_offset.
+FINGERTIP_OFFSET: tuple[tuple[float, float, float], ...] = (
+    (0.0, 0.003, 0.037),    # index_rota_link2
+    (0.0, 0.003, 0.037),    # mid_link2
+    (0.0, 0.003, 0.037),    # ring_link2
+    (0.044, 0.0, -0.002),   # thumb_rota_link2
+    (0.0, 0.003, 0.037),    # pinky_link2
+)
 
 # Object-frame keypoint corners before scaling.
 KEYPOINT_CORNERS: tuple[tuple[int, int, int], ...] = (

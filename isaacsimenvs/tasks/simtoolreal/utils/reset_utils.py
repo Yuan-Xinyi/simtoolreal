@@ -14,7 +14,7 @@ from .goal_sampling import sample_absolute_goal_pose, sample_delta_goal_pose
 from .obs_utils import KEYPOINT_CORNERS, NUM_FINGERTIPS
 from .scene_utils import (
     ARM_JOINT_REGEX,
-    FINGERTIP_BODY_REGEX,
+    FINGERTIP_LINK_NAMES,
     HAND_JOINT_REGEX,
     JOINT_NAMES_CANONICAL,
     PALM_BODY_NAME,
@@ -34,8 +34,17 @@ def allocate_state_buffers(env) -> None:
     env._arm_joint_ids = env.robot.find_joints(ARM_JOINT_REGEX)[0]      # 7
     env._hand_joint_ids = env.robot.find_joints(HAND_JOINT_REGEX)[0]     # 12
     env._palm_body_id = env.robot.find_bodies(PALM_BODY_NAME)[0][0]
-    env._fingertip_body_ids = env.robot.find_bodies(FINGERTIP_BODY_REGEX)[0]  # 5
+    # preserve_order: the articulation's own body order is not the order of
+    # FINGERTIP_LINK_NAMES (PhysX interleaves the fingers by depth), and
+    # obs_utils.FINGERTIP_OFFSET is indexed positionally — the thumb's pad
+    # offset points along a different axis than the four fingers', so a
+    # mismatch would silently attach the thumb's offset to another finger.
+    ft_ids, ft_names = env.robot.find_bodies(list(FINGERTIP_LINK_NAMES), preserve_order=True)
+    env._fingertip_body_ids = ft_ids
     assert len(env._fingertip_body_ids) == NUM_FINGERTIPS
+    assert tuple(ft_names) == FINGERTIP_LINK_NAMES, (
+        f"fingertip body order {ft_names} != FINGERTIP_LINK_NAMES {FINGERTIP_LINK_NAMES}"
+    )
 
     # Convert between Lab parser order and canonical policy order.
     lab_names = list(env.robot.data.joint_names)
