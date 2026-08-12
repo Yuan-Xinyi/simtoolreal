@@ -1278,6 +1278,50 @@ def _apply_urdf_sdf_collision_markers(
         )
 
 
+def _limit_convex_decomposition(usd_path: str, max_hulls: int, hull_vertices: int = 32) -> None:
+    """Cap how many convex pieces PhysX cooks per decomposed collider.
+
+    The default (16 pieces/link) costs ~4x throughput at scale for very little
+    extra fidelity: measured union volume of a decomposed XHand distal link is
+    1.60x the true mesh at 4 pieces, 1.41x at 8 and 1.33x at 16, against 2.06x
+    for a single hull. 8 sits at the knee of that curve — it restores the
+    concave palmar face (the part that made the policy grasp into the finger
+    gaps) without paying for the flat tail of the curve.
+    """
+    from pxr import Usd, UsdPhysics, PhysxSchema
+
+    raw_usd_path = Path(usd_path)
+    physics_usd_path = raw_usd_path.parent / "configuration" / f"{raw_usd_path.stem}_physics.usd"
+    edit_usd_path = physics_usd_path if physics_usd_path.exists() else raw_usd_path
+
+    stage = Usd.Stage.Open(str(edit_usd_path), Usd.Stage.LoadAll)
+    if stage is None:
+        raise RuntimeError(f"Failed to open USD while capping convex decomposition: {edit_usd_path}")
+    stage.Load()
+    for prim in Usd.PrimRange(stage.GetPseudoRoot(), Usd.TraverseInstanceProxies()):
+        if prim.IsInstance():
+            prim.SetInstanceable(False)
+
+    capped = 0
+    for prim in Usd.PrimRange(stage.GetPseudoRoot(), Usd.TraverseInstanceProxies()):
+        if prim.IsInstanceProxy() or not prim.HasAPI(UsdPhysics.MeshCollisionAPI):
+            continue
+        approx = UsdPhysics.MeshCollisionAPI(prim).GetApproximationAttr()
+        if not approx or approx.Get() != "convexDecomposition":
+            continue
+        api = PhysxSchema.PhysxConvexDecompositionCollisionAPI.Apply(prim)
+        api.CreateMaxConvexHullsAttr().Set(int(max_hulls))
+        api.CreateHullVertexLimitAttr().Set(int(hull_vertices))
+        capped += 1
+
+    stage.GetRootLayer().Save()
+    print(
+        f"[scene_utils] convex decomposition capped at {max_hulls} hulls "
+        f"({hull_vertices} verts each) on {capped} colliders in {edit_usd_path.name}",
+        flush=True,
+    )
+
+
 def _downgrade_collider_approximation(
     usd_path: str, mesh_stems: set[str], exclude_prefixes: tuple[str, ...] = ()
 ) -> None:
@@ -1859,6 +1903,7 @@ def setup_scene(env) -> None:
         mesh_stems={"link_base", *(f"link{i}" for i in range(1, 9))},
         exclude_prefixes=("right_hand",),
     )
+    _limit_convex_decomposition(robot_converted_usd, max_hulls=8)
     # Isaac Gym enables all robot self-collisions then masks adjacent links; mirror
     # that by authoring FilteredPairsAPI for the URDF-derived adjacent pairs before
     # the bake (PhysX additionally auto-filters directly-jointed parent/child links).
