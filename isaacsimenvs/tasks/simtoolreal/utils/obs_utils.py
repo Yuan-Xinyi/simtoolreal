@@ -14,29 +14,22 @@ from isaaclab.utils.math import convert_quat, quat_apply, quat_from_angle_axis, 
 # ----------------------------------------------------------------------------
 
 
-NUM_JOINTS: int = 19  # == len(scene_utils.JOINT_NAMES_CANONICAL): xArm7 (7) + XHand (12)
+NUM_JOINTS: int = 29  # == len(scene_utils.JOINT_NAMES_CANONICAL): xArm7 (7) + Sharpa (22)
 NUM_FINGERTIPS: int = 5
 NUM_KEYPOINTS: int = 4
 
-# Palm-grasp-center offset in the PALM_BODY_NAME (link7 flange) frame, i.e.
-# the point the five fingers close around. Measured as the mean of the five
-# finger-base joint origins, mapped through hand_mount's -90deg z rotation
-# into the flange frame. (Legacy Sharpa used (0, -0.02, 0.16) off the iiwa14
-# flange; the XHand is a shorter hand, hence the smaller z.)
-PALM_CENTER_OFFSET: tuple[float, float, float] = (-0.007, 0.0, 0.087)
+# Palm-center offset in the PALM_BODY_NAME (link7 flange) frame. The legacy
+# value (0, -0.02, 0.16) was measured off iiwa14_link_7, whose chain to the
+# hand was link_7 --(0,0,0.045)--> link_ee --(15deg roll)--> sharpa_mount.
+# xArm7's chain is link7 --(identity)--> link8 --(same 15deg roll)-->
+# sharpa_mount, i.e. the hand sits 0.045 m closer along z; the roll and the
+# x/y components are unchanged, so only z shifts: 0.16 - 0.045 = 0.115.
+PALM_CENTER_OFFSET: tuple[float, float, float] = (0.0, -0.02, 0.115)
 
-# Fingertip pad centers, per finger, in each distal body's own frame — the
-# centroid of the distal portion of that link's mesh. Ordered to match
-# FINGERTIP_LINK_NAMES. The thumb needs its own entry because its pad lies
-# along +X while the four fingers' pads lie along +Z.
-# Shape (5, 3) broadcasts to (num_envs, 5, 3) in _apply_local_offset.
-FINGERTIP_OFFSET: tuple[tuple[float, float, float], ...] = (
-    (0.0, 0.003, 0.037),    # index_rota_link2
-    (0.0, 0.003, 0.037),    # mid_link2
-    (0.0, 0.003, 0.037),    # ring_link2
-    (0.044, 0.0, -0.002),   # thumb_rota_link2
-    (0.0, 0.003, 0.037),    # pinky_link2
-)
+# Sharpa fingertip pad offset in each DP body's frame — the legacy value, which
+# is shared by all five fingers (unlike the XHand, whose thumb pad points along
+# a different axis and therefore needed a per-finger table).
+FINGERTIP_OFFSET: tuple[float, float, float] = (0.02, 0.002, 0.0)
 
 # Object-frame keypoint corners before scaling.
 KEYPOINT_CORNERS: tuple[tuple[int, int, int], ...] = (

@@ -29,100 +29,106 @@ from .generate_objects import generate_handle_head_urdfs
 # Joint names / regexes / body names
 # ----------------------------------------------------------------------------
 
-# xArm7 + XHand right hand (19 DOF: 7 arm + 12 hand). URDF merges the hand
-# onto the arm flange via fixed joints link7 -> link8 -> palm.
+# xArm7 + Sharpa LEFT hand (29 DOF: 7 arm + 22 hand). Controlled experiment for
+# docs/embodiment_reward_coupling.md: identical arm, reward, objects and table
+# to the xArm7+XHand build — only the hand differs, to test whether the
+# scoop-from-underneath strategy is caused by the hand's morphology.
+# The URDF merges the hand onto the arm flange via link7 -> link8 ->
+# sharpa_mount -> left_hand_C_MC, all fixed.
 ARM_JOINT_REGEX = "joint[1-7]"
-HAND_JOINT_REGEX = "(thumb|index|middle|ring|pinky)_joint.*"
+HAND_JOINT_REGEX = "left_.*"
 
-# Canonical policy order: arm base->flange, then thumb/index/middle/ring/pinky
-# proximal->distal (mirrors the legacy iiwa14+Sharpa ordering convention).
+# Arm base->flange, then the legacy Sharpa finger order verbatim.
 # Isaac Lab tensors are permuted at action/obs boundaries.
 JOINT_NAMES_CANONICAL: tuple[str, ...] = (
     "joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7",
-    "thumb_joint0", "thumb_joint1", "thumb_joint2",
-    "index_joint0", "index_joint1", "index_joint2",
-    "middle_joint0", "middle_joint1",
-    "ring_joint0", "ring_joint1",
-    "pinky_joint0", "pinky_joint1",
+    "left_1_thumb_CMC_FE", "left_thumb_CMC_AA", "left_thumb_MCP_FE",
+    "left_thumb_MCP_AA", "left_thumb_IP",
+    "left_2_index_MCP_FE", "left_index_MCP_AA", "left_index_PIP", "left_index_DIP",
+    "left_3_middle_MCP_FE", "left_middle_MCP_AA", "left_middle_PIP", "left_middle_DIP",
+    "left_4_ring_MCP_FE", "left_ring_MCP_AA", "left_ring_PIP", "left_ring_DIP",
+    "left_5_pinky_CMC", "left_pinky_MCP_FE", "left_pinky_MCP_AA",
+    "left_pinky_PIP", "left_pinky_DIP",
 )
-assert len(JOINT_NAMES_CANONICAL) == 19
+assert len(JOINT_NAMES_CANONICAL) == 29
 
-# The URDF importer runs with merge_fixed_joints=True, so `link8` and `palm`
-# (both fixed) merge into the flange body `link7` — that merged body is the
-# palm frame, mirroring the legacy choice of the iiwa14 flange link.
+# merge_fixed_joints folds link8 / sharpa_mount / left_hand_C_MC into the
+# flange body `link7` — the same role iiwa14_link_7 played in the legacy build.
 PALM_BODY_NAME = "link7"
-# Distal finger bodies (children of the last revolute joint per finger).
+# Merged fingertip bodies land on the DP links.
 # Order is load-bearing: obs_utils.FINGERTIP_OFFSET is indexed positionally
 # against this tuple, and reset_utils resolves body ids with preserve_order.
 FINGERTIP_LINK_NAMES: tuple[str, ...] = (
-    "index_rota_link2", "mid_link2", "ring_link2",
-    "thumb_rota_link2", "pinky_link2",
+    "left_index_DP", "left_middle_DP", "left_ring_DP",
+    "left_thumb_DP", "left_pinky_DP",
 )
 
 
-# Actuator gains. NOT sysID-calibrated against the real hardware yet — but
-# unlike the xhand repo's original flat values these are chosen so the
-# closed-loop response matches the *shape* of the iiwa14+Sharpa reference that
-# trained successfully: every joint critically-ish damped (zeta ~0.8) with a
-# natural frequency well inside the 120 Hz integrator's stable band.
-#
-# Armature is the motor rotor inertia reflected through the gear reduction
-# (N^2 * J_rotor). It is physically real and, for small finger joints, it
-# DOMINATES the link inertia. Omitting it (the xhand repo's config did) leaves
-# each XHand joint with only its ~2e-6 kg m^2 link inertia, giving
-# omega = sqrt(K/I) up to 1225 rad/s — omega*dt = 10 at 120 Hz, far outside
-# the range any solver handles cleanly — and zeta up to 20 (fingers so
-# overdamped they barely close). Sharpa's armature (4.2e-4 .. 3.2e-3) is what
-# kept its joints at omega ~40-107 rad/s, zeta ~0.9.
+# Arm gains: unchanged from the xArm7+XHand build, so the arm is identical
+# across the two experiments. Armature levels effective inertia to ~0.12 kg m^2
+# at every joint (link inertia alone falls from 0.114 at joint1 to 0.0006 at
+# joint7), and damping 11.1 puts every joint at zeta ~0.8.
 ARM_JOINT_ARMATURE: dict[str, float] = {
-    # Chosen so effective inertia (link + armature) is ~0.12 kg m^2 at every
-    # arm joint; link inertia alone falls from 0.114 (joint1) to 0.0006
-    # (joint7), which would otherwise put the wrist at omega = 840 rad/s.
     "joint1": 0.006, "joint2": 0.015, "joint3": 0.056, "joint4": 0.067,
     "joint5": 0.104, "joint6": 0.110, "joint7": 0.119,
 }
 ARM_JOINT_STIFFNESS: dict[str, float] = {f"joint{i}": 400.0 for i in range(1, 8)}
-# zeta = D / (2*sqrt(K*I_eff)) = 0.8 at I_eff = 0.12, K = 400.
-# (Was a flat 80.0, i.e. zeta 5.9 at the shoulder and 84 at the wrist.)
 ARM_JOINT_DAMPING: dict[str, float] = {f"joint{i}": 11.1 for i in range(1, 8)}
 
+# Hand gains: Sharpa's own sysID-calibrated per-joint values, verbatim from the
+# legacy iiwa14+Sharpa build (commit 84058661) that trained successfully. These
+# are the values the armature analysis used as its reference profile
+# (omega 39-107 rad/s, zeta ~0.9 on every joint).
 HAND_JOINT_NAMES: tuple[str, ...] = JOINT_NAMES_CANONICAL[7:]
-HAND_JOINT_STIFFNESS: dict[str, float] = {name: 3.0 for name in HAND_JOINT_NAMES}
-HAND_JOINT_DAMPING: dict[str, float] = {name: 0.1 for name in HAND_JOINT_NAMES}
-# Mirrors Sharpa's armature by joint role: base/spread joints get the CMC/MCP
-# value, distal joints the IP/DIP value. With K=3.0, D=0.1 this yields
-# omega 34-71 rad/s and zeta 0.56-1.18 — the Sharpa profile.
-# CAVEAT: the XHand1 manual describes a "full-gear Quasi-Direct Drive"
-# transmission, and QDD's low reduction ratio reflects far less rotor inertia
-# than a harmonic drive — the true armature may be an order of magnitude
-# smaller than these. Lowering them without also retuning K/D would push
-# omega*dt back up, so treat this as a sysID target, not a settled value.
+HAND_JOINT_STIFFNESS: dict[str, float] = {
+    "left_1_thumb_CMC_FE": 6.95, "left_thumb_CMC_AA": 13.2, "left_thumb_MCP_FE": 4.76,
+    "left_thumb_MCP_AA": 6.62, "left_thumb_IP": 0.9,
+    "left_2_index_MCP_FE": 4.76, "left_index_MCP_AA": 6.62,
+    "left_index_PIP": 0.9, "left_index_DIP": 0.9,
+    "left_3_middle_MCP_FE": 4.76, "left_middle_MCP_AA": 6.62,
+    "left_middle_PIP": 0.9, "left_middle_DIP": 0.9,
+    "left_4_ring_MCP_FE": 4.76, "left_ring_MCP_AA": 6.62,
+    "left_ring_PIP": 0.9, "left_ring_DIP": 0.9,
+    "left_5_pinky_CMC": 1.38, "left_pinky_MCP_FE": 4.76, "left_pinky_MCP_AA": 6.62,
+    "left_pinky_PIP": 0.9, "left_pinky_DIP": 0.9,
+}
+HAND_JOINT_DAMPING: dict[str, float] = {
+    "left_1_thumb_CMC_FE": 0.28676845, "left_thumb_CMC_AA": 0.40845109,
+    "left_thumb_MCP_FE": 0.20394083, "left_thumb_MCP_AA": 0.24044435,
+    "left_thumb_IP": 0.04190723,
+    "left_2_index_MCP_FE": 0.20859232, "left_index_MCP_AA": 0.24595532,
+    "left_index_PIP": 0.04243185, "left_index_DIP": 0.03504461,
+    "left_3_middle_MCP_FE": 0.2085923, "left_middle_MCP_AA": 0.24595532,
+    "left_middle_PIP": 0.04243185, "left_middle_DIP": 0.03504461,
+    "left_4_ring_MCP_FE": 0.20859226, "left_ring_MCP_AA": 0.24595528,
+    "left_ring_PIP": 0.04243183, "left_ring_DIP": 0.0350446,
+    "left_5_pinky_CMC": 0.02782345, "left_pinky_MCP_FE": 0.20859229,
+    "left_pinky_MCP_AA": 0.24595528, "left_pinky_PIP": 0.04243183,
+    "left_pinky_DIP": 0.0350446,
+}
 HAND_JOINT_ARMATURE: dict[str, float] = {
-    "thumb_joint0": 0.0032, "thumb_joint1": 0.00265, "thumb_joint2": 0.0006,
-    "index_joint0": 0.00265, "index_joint1": 0.00265, "index_joint2": 0.0006,
-    "middle_joint0": 0.00265, "middle_joint1": 0.0006,
-    "ring_joint0": 0.00265, "ring_joint1": 0.0006,
-    "pinky_joint0": 0.00265, "pinky_joint1": 0.0006,
+    "left_1_thumb_CMC_FE": 0.0032, "left_thumb_CMC_AA": 0.0032,
+    "left_thumb_MCP_FE": 0.00265, "left_thumb_MCP_AA": 0.00265, "left_thumb_IP": 0.0006,
+    "left_2_index_MCP_FE": 0.00265, "left_index_MCP_AA": 0.00265,
+    "left_index_PIP": 0.0006, "left_index_DIP": 0.00042,
+    "left_3_middle_MCP_FE": 0.00265, "left_middle_MCP_AA": 0.00265,
+    "left_middle_PIP": 0.0006, "left_middle_DIP": 0.00042,
+    "left_4_ring_MCP_FE": 0.00265, "left_ring_MCP_AA": 0.00265,
+    "left_ring_PIP": 0.0006, "left_ring_DIP": 0.00042,
+    "left_5_pinky_CMC": 0.00012, "left_pinky_MCP_FE": 0.00265,
+    "left_pinky_MCP_AA": 0.00265, "left_pinky_PIP": 0.0006, "left_pinky_DIP": 0.00042,
 }
-# Per-joint torque ceilings derived from the XHand1 product manual: single-
-# finger max load 50 N, times each joint's measured lever arm to the fingertip
-# pad (37 mm at the distal joints, 93 mm at the proximal, 111-122 mm at the
-# base/abduction joints). Replaces a flat 10 Nm placeholder, which would have
-# let the policy learn grips the real hand cannot reproduce.
-HAND_EFFORT_LIMIT_SIM: dict[str, float] = {
-    "thumb_joint0": 6.1, "thumb_joint1": 4.6, "thumb_joint2": 1.9,
-    "index_joint0": 5.5, "index_joint1": 4.6, "index_joint2": 1.9,
-    "middle_joint0": 4.6, "middle_joint1": 1.9,
-    "ring_joint0": 4.6, "ring_joint1": 1.9,
-    "pinky_joint0": 4.6, "pinky_joint1": 1.9,
-}
-HAND_VELOCITY_LIMIT_SIM = 3.14
+# Sharpa's URDF carries physically graded effort limits (0.19-3.30 Nm), so —
+# as in the legacy build — the actuator inherits them instead of overriding.
+HAND_EFFORT_LIMIT_SIM = None
+HAND_VELOCITY_LIMIT_SIM = None
 
 assert len(ARM_JOINT_STIFFNESS) == 7 and len(ARM_JOINT_DAMPING) == 7
 assert len(ARM_JOINT_ARMATURE) == 7
-assert len(HAND_JOINT_STIFFNESS) == 12 and len(HAND_JOINT_DAMPING) == 12
-assert len(HAND_JOINT_ARMATURE) == 12
+assert len(HAND_JOINT_STIFFNESS) == 22 and len(HAND_JOINT_DAMPING) == 22
+assert len(HAND_JOINT_ARMATURE) == 22
 assert set(HAND_JOINT_ARMATURE) == set(HAND_JOINT_NAMES)
+assert set(HAND_JOINT_STIFFNESS) == set(HAND_JOINT_NAMES)
 
 # Home pose for the bench-mounted layout (numerically solved via FK
 # coordinate descent, scratch tune_home.py): palm (link7) hovers at world
@@ -199,8 +205,11 @@ def build_robot_articulation_usd_cfg(
                 stiffness=HAND_JOINT_STIFFNESS,
                 damping=HAND_JOINT_DAMPING,
                 armature=HAND_JOINT_ARMATURE,
-                effort_limit_sim=HAND_EFFORT_LIMIT_SIM,
-                velocity_limit_sim=HAND_VELOCITY_LIMIT_SIM,
+                # None => inherit the URDF's own graded effort/velocity limits.
+                **({"effort_limit_sim": HAND_EFFORT_LIMIT_SIM}
+                   if HAND_EFFORT_LIMIT_SIM is not None else {}),
+                **({"velocity_limit_sim": HAND_VELOCITY_LIMIT_SIM}
+                   if HAND_VELOCITY_LIMIT_SIM is not None else {}),
             ),
         },
     )
@@ -1902,24 +1911,16 @@ def setup_scene(env) -> None:
     robot_converted_usd = _convert_urdf_to_usd(
         assets_cfg.robot_urdf, usd_work_dir,
         fix_base=True, self_collision=True,
-        # Convex DECOMPOSITION, not a single hull per link. The XHand reuses its
-        # detailed visual mesh as the collision mesh, and its fingers are curved:
-        # a single convex hull inflates each link 1.5-3.5x (distal links 2.06x)
-        # and fills the concave inner face plus the inter-segment gaps, so an
-        # object rests on an invisible bulge instead of the fingertip pad — the
-        # policy then learns to wedge objects in the finger gaps rather than
-        # pinch them. (The legacy Sharpa hand shipped purpose-built convex
-        # collision proxies, 1.00-1.27x, so a plain hull was fine there.)
-        collider_type="convex_decomposition",
+        # Plain convex hulls, as in the legacy build: Sharpa ships purpose-built
+        # convex collision proxies separate from its visual meshes (measured
+        # hull inflation 1.00-1.27x, and MP/PP/pinky_MC are already exactly
+        # convex), so a hull is faithful here and costs one shape per link.
+        # (The XHand branch needs convex_decomposition because it reuses its
+        # detailed visual mesh as its collider — see
+        # docs/embodiment_reward_coupling.md.)
+        collider_type="convex_hull",
         joint_drive=_robot_joint_drive_cfg(),
     )
-    # ...but only the hand needs it — see _downgrade_collider_approximation.
-    _downgrade_collider_approximation(
-        robot_converted_usd,
-        mesh_stems={"link_base", *(f"link{i}" for i in range(1, 9))},
-        exclude_prefixes=("right_hand",),
-    )
-    _limit_convex_decomposition(robot_converted_usd, max_hulls=8)
     # Isaac Gym enables all robot self-collisions then masks adjacent links; mirror
     # that by authoring FilteredPairsAPI for the URDF-derived adjacent pairs before
     # the bake (PhysX additionally auto-filters directly-jointed parent/child links).

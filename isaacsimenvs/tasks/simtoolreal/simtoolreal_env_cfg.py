@@ -54,7 +54,7 @@ from isaaclab.utils import configclass
 
 @configclass
 class AssetsCfg:
-    robot_urdf: str = "assets/urdf/xarm7_xhand/xarm7_xhand.urdf"
+    robot_urdf: str = "assets/urdf/xarm7_sharpa/xarm7_sharpa.urdf"
     table_urdf: str = "assets/urdf/table_narrow.urdf"
     # Per-env scale ranges applied to the table mesh at scene-build time.
     # Sampled independently per env: sx ~ U(table_scale_range_x), sy ~ U(table_scale_range_y).
@@ -240,7 +240,7 @@ class StudentObsCfg:
     # The URDF importer attaches the visual-origin xform (e.g.
     # `<origin xyz="0 0 0.38"/>` on a table) at the `/box/visuals` level;
     # targeting the rigid body root collapses across that xform and the
-    # raycaster places the geometry at z=0 instead. For the xarm7+xhand
+    # raycaster places the geometry at z=0 instead. For the xarm7+sharpa
     # articulation we use `.*` to pick up every link's `/visuals` child —
     # the MultiMeshRayCaster creates a view that tracks each matched prim's
     # world pose independently, so articulation joints update per step.
@@ -253,18 +253,14 @@ class StudentObsCfg:
         # `/visuals` group; multi-link URDFs (fabrica) match each link's
         # `/visuals` group independently, which is what we want.
         "/World/envs/env_.*/Object/.*/visuals",
-        # xArm7 arm + XHand link visuals. Explicit prefixes (not a
+        # xArm7 arm + Sharpa hand link visuals. Explicit prefixes (not a
         # broad `/Robot/.*/visuals`) so the parser doesn't try to make
         # rigid-body views for non-link prims like `/Robot/Looks` /
         # `/Robot/joints` (those stall sensor init for several minutes
         # with PhysX retries before timing out). `link.*` covers link_base
-        # and link1-7 (link8 + palm merge into link7 at import).
+        # and link1-7 (link8 / sharpa_mount merge into link7 at import).
         "/World/envs/env_.*/Robot/link.*/visuals",
-        "/World/envs/env_.*/Robot/thumb_.*/visuals",
-        "/World/envs/env_.*/Robot/index_.*/visuals",
-        "/World/envs/env_.*/Robot/mid_.*/visuals",
-        "/World/envs/env_.*/Robot/ring_.*/visuals",
-        "/World/envs/env_.*/Robot/pinky_.*/visuals",
+        "/World/envs/env_.*/Robot/left_.*/visuals",
     )
     # Rays that don't intersect any mesh return max_distance (instead of NaN)
     # when `depth_clipping_behavior == "max"`. Keep at the rasterizer's default
@@ -599,12 +595,12 @@ class SimToolRealEnvCfg(DirectRLEnvCfg):
     # --- DirectRLEnvCfg required fields ---
     decimation: int = 2  # 2 physics substeps per policy step
     episode_length_s: float = 10.0  # 600 policy steps * 2 * (1/120) = 10s
-    action_space: int = 19  # 7-DOF xArm7 + 12-DOF XHand
+    action_space: int = 29  # 7-DOF xArm7 + 22-DOF Sharpa
     # Obs/state sizes are derived from obs.obs_list / obs.state_list at env init.
     # Placeholder keeps the configclass instantiable before the env computes the
-    # final spaces (110/132 with the default lists at NUM_JOINTS=19).
-    observation_space: int = 110
-    state_space: int = 132
+    # final spaces (140/162 with the default lists at NUM_JOINTS=29).
+    observation_space: int = 140
+    state_space: int = 162
 
     # --- Isaac Lab base fields ---
     sim: SimulationCfg = _default_sim_cfg()

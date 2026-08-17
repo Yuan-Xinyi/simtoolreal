@@ -3,9 +3,9 @@
 # -----------------------------------------------------------------------------
 decimation: 2
 episode_length_s: 10.0
-action_space: 19  # 7-DOF xArm7 + 12-DOF XHand
+action_space: 29  # 7-DOF xArm7 + 22-DOF Sharpa
 # observation_space / state_space are computed in SimToolRealEnv.__init__ from
-# obs.obs_list / obs.state_list (see Phase D). Configclass defaults (110/132)
+# obs.obs_list / obs.state_list (see Phase D). Configclass defaults (140/162)
 # act only as transient placeholders before __init__ overwrites them.
 
 # -----------------------------------------------------------------------------
@@ -44,7 +44,7 @@ scene:
 # 3) assets — URDFs, procedural-generation knobs, static per-material frictions
 # -----------------------------------------------------------------------------
 assets:
-  robot_urdf: "assets/urdf/xarm7_xhand/xarm7_xhand.urdf"
+  robot_urdf: "assets/urdf/xarm7_sharpa/xarm7_sharpa.urdf"
   table_urdf: "assets/urdf/table_narrow.urdf"
 
   object_name: "handle_head_primitives"
