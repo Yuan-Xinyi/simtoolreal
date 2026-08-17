@@ -101,3 +101,35 @@ To confirm the morphology (not the arm) is responsible, we build **xArm7 +
 Sharpa** — same arm, same reward, same objects, only the hand swapped back —
 and observe whether the scooping disappears. Result recorded below once the run
 has trained.
+
+## Verification status — the causal claim above is NOT yet confirmed
+
+Everything above the "Controlled experiment" heading was reasoned from joint
+counts and the form of the reward, **before** the behaviour was measured. A
+first quantitative probe does not reproduce it:
+
+Sampling the eight most recent `interactive_viewer` snapshots of each run and
+locating the frame where the object first rises 5 cm off the table, then asking
+how many fingertips are above the object's centre at that instant:
+
+| run | stage | fingertips above object centre | median dz |
+|---|---|---|---|
+| xArm7+XHand | epoch 34k, best 3135 | 34/40 (85%) | +0.019 m |
+| xArm7+Sharpa | epoch 6k, best ~250 | 19/40 (48%) | −0.016 m |
+
+That is the opposite of the prediction. Two caveats keep it from being
+decisive, and both must be resolved before either conclusion is drawn:
+
+1. **The runs are at incomparable stages** — a mature policy against one that
+   has only just learned to lift at all.
+2. **The probe is weak, and demonstrably has false positives.** Rendering the
+   hand at the detected lift frame shows at least one episode where the hand is
+   nowhere near the object, i.e. the "lift" was not a grasp. And "fingertip
+   above the object's centre" is in any case a poor proxy for "not scooped" —
+   an object can ride on the finger undersides with the tips still above its
+   centre.
+
+So the mechanism described above remains a *hypothesis with an unverified
+premise*: it explains a behaviour that has been observed by eye but not yet
+characterised quantitatively. Do not cite it as a finding until the probe is
+sound and the two runs are compared at matched maturity.
