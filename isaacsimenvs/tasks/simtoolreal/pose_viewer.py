@@ -25,8 +25,8 @@ from .utils.scene_utils import JOINT_NAMES_CANONICAL
 REPO_ROOT = Path(__file__).resolve().parents[3]
 # xarm7_xhand assets only exist on the fork's migration branch for now;
 # switch back to the upstream main raw base once the branch is merged.
-GITHUB_RAW_BASE_MAIN = "https://raw.githubusercontent.com/Yuan-Xinyi/simtoolreal/xarm7-xhand/"
-ROBOT_URDF_RELATIVE_PATH = "assets/urdf/xarm7_xhand/xarm7_xhand.urdf"
+GITHUB_RAW_BASE_MAIN = "https://raw.githubusercontent.com/Yuan-Xinyi/simtoolreal/xarm7-sharpa/"
+ROBOT_URDF_RELATIVE_PATH = "assets/urdf/xarm7_sharpa/xarm7_sharpa.urdf"
 TABLE_URDF_PATH = REPO_ROOT / "assets" / "urdf" / "table_narrow.urdf"
 
 
