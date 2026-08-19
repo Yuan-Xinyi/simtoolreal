@@ -24,33 +24,57 @@ has no notion of approach direction, of contact, or of opposition between
 fingers. It is therefore *strategy-agnostic* — it scores whatever configuration
 happens to bring five points near one point.
 
-What that term's optimum looks like depends entirely on the hand's kinematics:
+What that term's optimum looks like depends on the hand's kinematics — but see
+the correction below before reading any mechanism into the difference.
 
-| | Sharpa (original) | XHand (ported) |
+> **Correction (2026-08-19).** An earlier version of this document explained the
+> difference by saying Sharpa has six abduction joints and can spread its
+> fingers while the XHand cannot. **That is factually wrong.** Counting joints
+> in the URDF is not the same as reading their travel. In the asset actually
+> used — `iiwa14_left_sharpa_adjusted_restricted.urdf`, and the file name means
+> what it says — the four fingers' abduction joints are clamped to
+> **±0.035 rad, i.e. 4° total**. Sharpa's fingers do not spread either. The
+> premise of the original explanation does not exist.
+
+Counting only joints with ≥30° of travel, the verified difference is not
+lateral freedom but **curl depth and thumb dexterity**:
+
+| | Sharpa | XHand |
 |---|---|---|
-| Abduction / adduction joints | **6** — one per finger, two on the thumb | **1** — index only, and just 22° of travel |
-| Thumb joints | **5** | 3, of which two share the axis `(0,-1,0)` |
-| Middle / ring / pinky | MCP_FE + **MCP_AA** + PIP + DIP | two joints, both flexion about `(1,0,0)` |
+| Usable flexion joints per finger | **3** — MCP 100° + PIP 100° + DIP 80° | **2** — 110° + 110° |
+| Usable thumb joints | **4**, including MCP_AA 40° of opposition | 3 |
+| Four-finger abduction | 4° (locked) | 0–22° (locked) |
 
-The middle, ring and pinky fingers of the XHand have **no lateral freedom at
-all**: they sweep as three parallel blades in fixed planes. Combined with a
-thumb that has limited opposition travel, the configuration "five fingertips
-spread around the object from above" is close to unreachable.
+A three-segment finger can curl into a hook that closes around a handle; a
+two-segment finger can only pinch. Whether *that* is what decides the grasp
+strategy is an open hypothesis — it has not been tested, and the previous
+confident story in this space turned out to rest on an unchecked number.
 
-So:
+Two secondary factors are real regardless: `lifting_reward` scores only the
+object's rise in z, so a scoop lifts exactly as well as a pinch; and the
+XHand's palm (190 × 94 × 47 mm) is a large flat surface — a good shovel.
 
-- **Sharpa** — fingers spread, thumb opposes: the cheapest way to bring five
-  fingertips near the object centre is to wrap it. A grasp falls out for free.
-- **XHand** — four fingers locked in parallel planes: the cheapest way to bring
-  five fingertips near the object centre is to put that rake **under** the
-  object and close it against the palm. A top-down pinch only brings two or
-  three tips close, and therefore scores *less* on a term that sums over five.
+The one thing that is certain is the negative result: **the reward asks for
+nothing that distinguishes a fingertip grasp from a scoop.** A re-read of the
+original Isaac Gym implementation (2026-08-19) confirms this is true of the
+original too, not just of this port — every mechanism that might have
+specified a grasp is either identical here or switched off there:
 
-Two secondary factors compound it: `lifting_reward` scores only the object's
-rise in z, so a scoop lifts exactly as well as a pinch; and the XHand's palm
-(190 × 94 × 47 mm) is a large flat surface — a good shovel.
+| mechanism | original setting |
+|---|---|
+| `object_lin/ang_vel_penalty` | scale `0.0` — disabled |
+| `hand_delta_penalty` | multiplied by `0` in code — disabled |
+| `finger_rew_coeffs` (per-finger weighting) | all ones, never modified |
+| `withTableForceSensor` (press-the-table termination) | `False` |
+| `resetWhenDropped` | `False` |
+| contact forces / normals / opposition | absent from the reward entirely |
+| fingertip and palm offsets, action pipeline, object reset | identical to this port |
 
-The policy is not misbehaving. It found the reward's optimum for this body.
+So whatever makes the original's grasps acceptable, **it is not a reward term** —
+there is no such term to inherit. That also means the premise "the original
+grasps properly" deserves its own check: it may be a property of the Sharpa
+morphology under this weak reward, or it may be an impression that has never
+been measured.
 
 ## What this is not
 
@@ -66,9 +90,16 @@ plus the reachable motion set decides which strategy wins.
 Manipulation reward functions are almost never embodiment-neutral. They are
 co-designed with a morphology, and the terms that "work" silently encode
 assumptions about what is easy for that morphology. "Bring the fingertips close
-to the object" means *wrap* on a hand that can spread and *scoop* on a hand that
-cannot. Port the reward to a new hand and the assumption fails quietly: the
-reward curve still looks healthy, only the behaviour changes.
+to the object" specifies a goal, not a strategy; which strategy achieves it
+most cheaply is decided by the hand. Port the reward to a new hand and the
+assumption fails quietly: the reward curve still looks healthy, only the
+behaviour changes.
+
+A second, harder-won lesson from this document's own history: **a joint that
+exists in the URDF is not a degree of freedom.** The explanation that stood
+here for two days rested on counting `_AA` joints without reading their
+`<limit>` — and every one of them was clamped to 4°. Read the travel, not the
+tree.
 
 This is why the sibling `xhand_inhand` repo's `pick_tool_token/grasp_signals.py`
 constrains **contact topology** instead of proximity — `wrap_quality` requires
