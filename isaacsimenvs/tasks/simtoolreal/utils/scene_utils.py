@@ -130,16 +130,24 @@ assert len(HAND_JOINT_ARMATURE) == 22
 assert set(HAND_JOINT_ARMATURE) == set(HAND_JOINT_NAMES)
 assert set(HAND_JOINT_STIFFNESS) == set(HAND_JOINT_NAMES)
 
-# Home pose for the bench-mounted layout (numerically solved via FK
-# coordinate descent, scratch tune_home.py): palm (link7) hovers at world
-# (0, 0.05, 0.80) — ~0.27 m above the tabletop over the object spawn
-# region — with the flange axis pointing down at the table. The xhand
-# repo's original home pose was authored for a floor-level base and folds
-# the arm straight up under this mount, so it was replaced. xArm7 limits:
-# j2 in [-2.18, 2.18], j4 in [-0.11, pi], j6 in [-1.75, pi]; rest +-pi.
+# Home pose reproducing the ORIGINAL iiwa14 wrist geometry, measured off the
+# Isaac Gym implementation at its default pose: flange 0.199 m above the object
+# and 0.222 m horizontally from it, with the flange axis 83.7 deg off vertical
+# — the wrist axis is near-HORIZONTAL and the hand extends forward over the
+# object with the palm plane flat. This pose lands at 83.7 deg, the flange
+# exactly on the reference point, fingertips 0.017 m horizontally from the
+# object and 0.194 m above it (reference: 0.034 / +0.167).
+#
+# The previous home pose aimed the flange straight DOWN, 14.3 deg off vertical.
+# That target was invented during the port ("flange pointing down at the table"
+# in the solver), not inherited — the original never does it. With the wrist
+# vertical the fingers hang like a rake, and flexing them sweeps the tips UP
+# and sideways (+0.43 in z) rather than down onto the object (-0.18 here), so
+# the hand cannot close from above at all — only from the side or underneath.
+# Both the XHand and the Sharpa hand scooped objects up from below under it.
 ARM_DEFAULT_JOINT_POS: dict[str, float] = {
-    "joint1": 0.0, "joint2": -0.3548, "joint3": 0.0, "joint4": 0.465,
-    "joint5": 0.0, "joint6": 1.0688, "joint7": 0.0,
+    "joint1": 0.4280, "joint2": -0.7108, "joint3": -0.2597, "joint4": 1.1458,
+    "joint5": -0.6040, "joint6": 0.4101, "joint7": 0.5216,
 }
 
 _CONTACT_OFFSET = 0.002
@@ -175,17 +183,19 @@ def build_robot_articulation_usd_cfg(
         prim_path="/World/envs/env_.*/Robot",
         spawn=UsdFileCfg(usd_path=usd_path),
         init_state=ArticulationCfg.InitialStateCfg(
-            # Bench-mounted, matching the real rig: the base plate sits ON the
-            # work surface, ~1 cm proud of it. z = 0.54 = tabletop (table_reset_z
-            # 0.38 box center + 0.15 half-height = 0.53) + 0.01 base plate.
-            # (A floor mount is a non-starter: the xArm7 shoulder is only
-            # ~0.27 m above its base, below the tabletop.) The base is fixed
-            # (fix_base), so no physical stand is modeled in sim; y = 0.35
-            # means the real base plate center sits 0.35 m behind the object
-            # workspace center — far table edge 0.55 m away, inside the
-            # ~0.70 m reach. Yaw -90deg points the arm's base +X axis at the
-            # table (world -Y), keeping the solved home pose valid.
-            pos=(0.0, 0.35, 0.54),
+            # Floor-mounted, mirroring the original iiwa14 layout: the arm
+            # stands beside the table and reaches up and over it, instead of
+            # sitting on the work surface at the object's own height.
+            #
+            # The distance is scaled by reach rather than copied. The iiwa
+            # places its wrist target at 75% of its 1.261 m base-to-flange
+            # span; this URDF spans 1.039 m (the quoted xArm7 "0.70 m" is
+            # measured from joint1, not from link_base), so 0.50 m puts the
+            # same target at 76%. Verified collision-free with 15.2 cm
+            # clearance to the table box — arm/table collision is active, a
+            # link driven into the tabletop stalls on it — and all eight
+            # goal-volume corners fall within 1.13 m of the base.
+            pos=(0.0, 0.50, 0.0),
             rot=(0.70710678, 0.0, 0.0, -0.70710678),
             joint_pos={
                 **arm_default,
