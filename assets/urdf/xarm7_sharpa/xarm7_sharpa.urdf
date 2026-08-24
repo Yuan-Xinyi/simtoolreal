@@ -1075,6 +1075,6 @@
   <joint name="sharpa_mount" type="fixed">
     <parent link="link8" />
     <child link="sharpa_mount" />
-    <origin xyz="0 0 0" rpy="0 0 3.403392" />
+    <origin xyz="0 0 0" rpy="0 0 0.261799" />
   </joint>
 </robot>
