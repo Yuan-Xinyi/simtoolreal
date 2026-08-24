@@ -164,3 +164,72 @@ So the mechanism described above remains a *hypothesis with an unverified
 premise*: it explains a behaviour that has been observed by eye but not yet
 characterised quantitatively. Do not cite it as a finding until the probe is
 sound and the two runs are compared at matched maturity.
+
+## Correction (2026-08-24) — two geometric findings retracted
+
+Both of the geometry results this document was built on turn out to be
+measurement errors, not properties of the hardware. Recording them here because
+each one cost a training run.
+
+### The mount roll was never a free parameter
+
+The 15°-vs-195° `sharpa_mount` experiments could not have tested what they
+claimed to. In the merged URDF, `link8_joint` is the identity transform and the
+`sharpa_mount` origin is a pure rotation about **z** — which is exactly
+`joint7`'s axis. Any mount roll is therefore absorbed by `joint7`, and `joint7`
+has ±180° of travel. Rolling the mount only shifts `joint7`'s zero.
+
+What the experiments actually varied was the **home pose**: the roll was changed
+while the joint values were held fixed, so the hand moved. The observed effects
+were real, but they were effects of the home pose, and attributing them to the
+mount sent the next two runs after the wrong variable.
+
+*A fixed joint between two links is only a design parameter if it is not
+collinear with an actuated axis next to it. Check the axis before ablating it.*
+
+### The opposition measurements used an object ~4× too large
+
+The opposition criterion was evaluated against a box with half-extents
+`(0.14, 0.03, 0.025)`. The object's actual half-extents are
+`cfg.fixed_size / 2 = (0.071, 0.015, 0.014)` — the earlier numbers were full
+extents used as half extents, giving a box roughly 4× too big by volume. Almost
+any fingertip "touched" it, so the reported angles (reference 151°, the 195°
+build 52.5°) describe nothing real. A second bug compounded it: fingertips
+*inside* the box fell back to a constant approach direction, which pinned some
+later measurements to exactly 90.0°.
+
+With the real object and table geometry (table top 0.53, footprint 0.475 × 0.4)
+and a grasp station calibrated **on the reference itself** rather than invented,
+the result reverses:
+
+| configuration | thumb touches | finger touches | best opposition |
+|---|---|---|---|
+| reference iiwa14 + Sharpa | 4901 | 3477 | **180.0°** |
+| xArm7 + Sharpa, solved home | 4200 | 3885 | **180.0°** |
+
+The xArm7 is not geometrically handicapped for a thumb-opposed pinch. It has the
+same opposition capability as the reference.
+
+The calibration also shows the grasp station must sit **behind** the object
+(+3…+6 cm in y): at y ≤ 0 the fingers register zero touches at every height,
+because the hand approaches from +y and the fingers extend in −y.
+
+### What actually differed
+
+The port's home pose was solved to match the original's **flange**. That is the
+wrong link: the original's hand hangs off `iiwa14_link_ee`, 4.5 cm beyond
+`iiwa14_link_7`, so equal flange poses leave the two hands 4.5 cm apart. Solving
+against `left_hand_C_MC` — the same link on both robots — reproduces the
+reference hand pose to 0.00 cm, with x/z axis alignment 1.0000 / 0.9947 and the
+same +17.8 cm clearance over the table.
+
+*Match the link whose geometry you care about, not the one that is convenient to
+compute.*
+
+### Known residual: 5% of goals are unreachable
+
+Sampling the goal volume uniformly, 114/120 targets are reachable (median miss
+0.00 cm); the misses are confined to the far-top corners, up to 13 cm short.
+This is the xArm7's shorter reach (1.039 m vs the KUKA's 1.261 m) and is
+**pre-existing**. The goal volume is deliberately left unchanged so the run stays
+comparable to the KUKA baseline curve.
