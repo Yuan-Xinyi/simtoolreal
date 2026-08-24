@@ -233,3 +233,45 @@ Sampling the goal volume uniformly, 114/120 targets are reachable (median miss
 This is the xArm7's shorter reach (1.039 m vs the KUKA's 1.261 m) and is
 **pre-existing**. The goal volume is deliberately left unchanged so the run stays
 comparable to the KUKA baseline curve.
+
+## Resolution (2026-08-25) — the home pose was the cause, and fixing it fixed the grasp
+
+With the reward still frozen, the hand-base home-pose fix (commit `2e955749`)
+changes the learned grasp strategy outright.
+
+Criterion: at the best-contact frame of each lifted episode, project the thumb's
+and each finger's offset from the object centre onto the object's short-axis
+(local y-z) plane and measure the angle between them. >120° = the thumb and a
+finger are on opposite sides of the object. Position-based rather than
+normal-based, because a penetrating fingertip gets an axis-aligned face normal,
+which quantises the angle onto 0/90/180 exactly where contact is deepest.
+
+| run | stage | best reward | opposed pinch | partial | scoop | no grasp |
+|---|---|---|---|---|---|---|
+| `sharpa_kuka_aligned` | epoch ~15k (matched) | ~3200 | 0/17 | 0 | 0 | 17/17 |
+| `sharpa_kuka_aligned` | epoch 76k (final) | 3422.8 | 0/16 | 0 | 0 | 16/16 |
+| `sharpa_handbase` | epoch 13.5k | 3212 | **10/17** | 4/17 | 3/17 | 14/31 |
+
+The old configuration never involves the thumb — **at every maturity**, including
+its final best policy, 2-3 fingers are on the object while the thumb sits 7-12 cm
+away. That is precisely the "grasping through the gap between the fingers"
+behaviour, now quantified. Training longer does not fix it: the final policy is
+no better than the matched-maturity one.
+
+The new configuration forms a thumb-opposed pinch in 59% of the episodes where
+the hand actually holds the object, at one fifth of the epochs.
+
+Learning speed is not the cost: milestone epochs are 200 @ 3,055 (vs 3,196),
+400 @ 9,211 (vs 6,291), 800 @ 10,519 (vs 9,333), 1600 @ 11,442 (vs 11,521),
+3200 @ 13,526 (vs 15,102). The 400 crossover was noise; by 3200 the new run is
+ahead.
+
+### Caveats
+
+* 14/31 `sharpa_handbase` episodes register a lift with no fingertip in contact
+  at any lifted frame. These are not scored. They are likely reset-launch
+  artifacts (see the `reset_clearance` comments in the env cfg) rather than
+  grasps, but they are not yet explained.
+* `sharpa_handbase` is mid-training (epoch 13.5k of 1M); the comparison against
+  the old run's *final* policy is favourable to the new run only because the old
+  run's behaviour is flat in this respect, not because maturity is matched.
