@@ -130,24 +130,33 @@ assert len(HAND_JOINT_ARMATURE) == 22
 assert set(HAND_JOINT_ARMATURE) == set(HAND_JOINT_NAMES)
 assert set(HAND_JOINT_STIFFNESS) == set(HAND_JOINT_NAMES)
 
-# Home pose reproducing the ORIGINAL iiwa14 wrist geometry, measured off the
-# Isaac Gym implementation at its default pose: flange 0.199 m above the object
-# and 0.222 m horizontally from it, with the flange axis 83.7 deg off vertical
-# — the wrist axis is near-HORIZONTAL and the hand extends forward over the
-# object with the palm plane flat. This pose lands at 83.7 deg, the flange
-# exactly on the reference point, fingertips 0.017 m horizontally from the
-# object and 0.194 m above it (reference: 0.034 / +0.167).
+# Home pose reproducing the ORIGINAL iiwa14 hand placement, solved against the
+# HAND BASE (left_hand_C_MC) rather than the flange. Matching flanges is wrong
+# here: the original's hand hangs off iiwa14_link_ee, 4.5 cm beyond
+# iiwa14_link_7, so equal flange poses leave the two hands 4.5 cm apart. The
+# hand base is the same body on both robots, so matching it matches what the
+# fingers can actually reach.
 #
-# The previous home pose aimed the flange straight DOWN, 14.3 deg off vertical.
-# That target was invented during the port ("flange pointing down at the table"
-# in the solver), not inherited — the original never does it. With the wrist
-# vertical the fingers hang like a rake, and flexing them sweeps the tips UP
-# and sideways (+0.43 in z) rather than down onto the object (-0.18 here), so
-# the hand cannot close from above at all — only from the side or underneath.
-# Both the XHand and the Sharpa hand scooped objects up from below under it.
+# Reference (iiwa14 at its Isaac Gym default), hand base relative to the object:
+#   offset (-0.000, +0.128, +0.190), |d| = 0.229 m
+#   hand x-axis (-0.001, +0.109, -0.994), z-axis (0.000, -0.994, -0.109)
+# This pose reproduces it to 0.00 cm with x/z axis alignment 1.0000 / 0.9947,
+# and lands at the same +17.8 cm clearance over the table top as the reference.
+#
+# Note the hand mount roll is NOT an independent parameter: link8_joint is
+# identity and the sharpa_mount origin is a pure rotation about z, which is
+# exactly joint7's axis. Any mount roll is absorbed by joint7 (+-180 deg range),
+# so only this home pose actually places the hand. Earlier 15-vs-195 deg mount
+# experiments were therefore testing the home pose, not the mount.
+#
+# An older home pose aimed the flange straight DOWN, 14.3 deg off vertical. That
+# target was invented during the port, not inherited — the original never does
+# it. With the wrist vertical the fingers hang like a rake, and flexing them
+# sweeps the tips UP and sideways rather than down onto the object, so the hand
+# cannot close from above at all. Both hands scooped objects from below under it.
 ARM_DEFAULT_JOINT_POS: dict[str, float] = {
-    "joint1": 0.4280, "joint2": -0.7108, "joint3": -0.2597, "joint4": 1.1458,
-    "joint5": -0.6040, "joint6": 0.4101, "joint7": 0.5216,
+    "joint1": -0.1915, "joint2": -0.5534, "joint3": 0.1515, "joint4": 1.2045,
+    "joint5": 0.5736, "joint6": 0.3206, "joint7": -2.3092,
 }
 
 _CONTACT_OFFSET = 0.002
